@@ -1,0 +1,26 @@
+[package]
+name = "rekordbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+collection.workspace = true
+
+[dev-dependencies]
+# The oracle. Not a dependency: its row types cannot be constructed from outside
+# it, so it can verify this crate's output but not produce it.
+#
+# Pinned to a commit rather than the published 0.3.0, which is two years behind
+# the format analysis: it reads a cue point's type as 0 where the current
+# reading, and rekordbox itself, use 1. An oracle has to be at least as current
+# as the writer it checks.
+rekordcrate = { git = "https://github.com/Holzhaus/rekordcrate", rev = "41f790b2692d73696c492b98fbf8ebb61f439103", default-features = false }
+# Matching what the pinned rekordcrate uses, so its BinRead impls satisfy the
+# trait this test calls.
+binrw = "0.15"
+fallible-iterator = "0.3"
+waveform.workspace = true

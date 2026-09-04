@@ -8,7 +8,9 @@
 use crate::AnalysisOptions;
 use anyhow::{Result, bail};
 use audio::Audio;
-use report::{AnalysisReport, AnalysisSettings, BandTempo, Heatmap, SourceInfo, SpectrumSummary};
+use report::{
+    AnalysisReport, AnalysisSettings, BandTempo, Heatmap, SourceInfo, SpectrumSummary, Waveforms,
+};
 use spectral::{ChromaMapper, LogBands, Stft, TuningEstimator};
 use tempo::{FluxAccumulator, Novelty, TempoPrior, TempoSettings};
 
@@ -198,6 +200,10 @@ pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<O
         key,
         bands,
         spectrum,
+        waveforms: Waveforms {
+            preview: waveform::preview(&audio.samples, audio.sample_rate),
+            detail: waveform::detail(&audio.samples, audio.sample_rate),
+        },
     };
 
     Ok(Outcome {

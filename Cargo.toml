@@ -15,11 +15,14 @@ rust-version = "1.91"
 
 [workspace.dependencies]
 audio = { path = "libraries/rust/audio" }
+collection = { path = "libraries/rust/collection" }
+rekordbox = { path = "libraries/rust/rekordbox" }
 diagnostics = { path = "libraries/rust/diagnostics" }
 spectral = { path = "libraries/rust/spectral" }
 tempo = { path = "libraries/rust/tempo" }
 key-detect = { path = "libraries/rust/key-detect" }
 report = { path = "libraries/rust/report" }
+waveform = { path = "libraries/rust/waveform" }
 
 # rustfft is the only numeric dependency: a mixed-radix FFT that accepts any
 # window length, so a window size is a tuning knob rather than a rebuild.

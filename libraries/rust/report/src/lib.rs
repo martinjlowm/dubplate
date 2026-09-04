@@ -16,6 +16,7 @@ use diagnostics::{Diagnostic, Severity};
 use key_detect::KeyAnalysis;
 use serde::Serialize;
 use tempo::TempoAnalysis;
+use waveform::Waveform;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct SourceInfo {
@@ -72,6 +73,19 @@ pub struct SpectrumSummary {
     pub high_share: f64,
 }
 
+/// The two waveforms a player draws, at the resolutions their formats read.
+///
+/// Here rather than only in an exporter because they are measurements of the
+/// audio like everything else in the report, and because the export step reads
+/// this file instead of decoding the track a second time.
+#[derive(Clone, Debug, Serialize)]
+pub struct Waveforms {
+    /// 400 columns spanning the whole track.
+    pub preview: Waveform,
+    /// 150 columns per second.
+    pub detail: Waveform,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct AnalysisReport {
     pub tool: &'static str,
@@ -82,6 +96,7 @@ pub struct AnalysisReport {
     pub key: KeyAnalysis,
     pub bands: Vec<BandTempo>,
     pub spectrum: SpectrumSummary,
+    pub waveforms: Waveforms,
 }
 
 impl AnalysisReport {
