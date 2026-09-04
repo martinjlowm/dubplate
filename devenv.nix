@@ -90,12 +90,15 @@ in {
   # regenerates it at eval time, so a dependency change has to regenerate it
   # here or the Nix build keeps compiling the previous dependency set.
   #
-  # `-h` points at a temp path only to stop crate2nix writing a
-  # crate-hashes.json into the tree: registry hashes come from Cargo.lock and
-  # are baked into Cargo.nix, so a second file would be redundant. Git exports
-  # GIT_DIR and friends to hooks, which nix-prefetch-git would inherit and use
-  # to reinitialise this repo instead of its own scratch directory, so they are
-  # unset.
+  # `-h` names a gitignored file rather than a temp one, and the path matters:
+  # crate2nix records the arguments it was called with in a comment at the top
+  # of Cargo.nix, so a temp path there makes the file differ on every run and
+  # the staleness check can never pass. The hashes themselves are redundant,
+  # since registry hashes come from Cargo.lock and are baked into Cargo.nix.
+  #
+  # Git exports GIT_DIR and friends to hooks, which nix-prefetch-git would
+  # inherit and use to reinitialise this repo instead of its own scratch
+  # directory, so they are unset.
   git-hooks.hooks.cargoNixSync = {
     enable = true;
     name = "cargo-nix-sync";
@@ -103,9 +106,7 @@ in {
       ${pkgs.bash}/bin/bash -euo pipefail -c '
         cd "${config.devenv.root}"
         unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_PREFIX
-        tmp=$(mktemp -d)
-        trap "rm -rf $tmp" EXIT
-        ${crate2nix}/bin/crate2nix generate -h "$tmp/crate-hashes.json"
+        ${crate2nix}/bin/crate2nix generate -h .crate-hashes.json
       '
     '';
     files = "Cargo\\.(toml|lock|nix)$";

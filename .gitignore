@@ -10,6 +10,9 @@ result-*
 
 # Rust (single workspace target/ at the repo root)
 /target/
+# Written by crate2nix beside Cargo.nix; the hashes it holds are already in
+# there, and its path has to be stable or the staleness check never passes.
+/.crate-hashes.json
 
 # Audio under analysis, and whatever a run writes about it. Tracks are tens of
 # megabytes each and licensed to whoever downloaded them; test fixtures are

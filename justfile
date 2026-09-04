@@ -47,11 +47,7 @@ fmt-check:
 
 # Regenerate the crate graph after a dependency change
 sync-cargo-nix:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' EXIT
-    crate2nix generate -h "$tmp/crate-hashes.json"
+    crate2nix generate -h .crate-hashes.json
 
 # Fail if Cargo.nix no longer matches the manifests
 check-cargo-nix: sync-cargo-nix
