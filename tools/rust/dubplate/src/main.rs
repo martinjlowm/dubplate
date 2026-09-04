@@ -1,14 +1,13 @@
 //! The command line: one analysis pass, one output directory, one summary.
 
 mod export;
-mod figures;
-mod pipeline;
 mod rename;
 mod summary;
 
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use key_detect::Profile;
+use pipeline::AnalysisOptions;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -43,71 +42,76 @@ enum Command {
     Selftest(SelftestArgs),
 }
 
+/// The analysis flags, which are `pipeline::AnalysisOptions` with clap on top.
+///
+/// Every default reads out of that struct rather than being repeated here, so
+/// `--help` and a browser filling the same options in cannot disagree about
+/// what the tool does when told nothing.
 #[derive(Args, Clone)]
-pub struct AnalysisOptions {
+pub struct AnalysisArgs {
     /// STFT window, in samples. Larger resolves frequency, smaller resolves
     /// time; onsets need time and key needs frequency, which is the tension the
     /// default sits in the middle of.
-    #[arg(long, default_value_t = 2048)]
+    #[arg(long, default_value_t = AnalysisOptions::default().window)]
     pub window: usize,
 
     /// STFT hop, in samples. Sets the frame rate of every novelty curve, and so
     /// the finest tempo difference that can be resolved.
-    #[arg(long, default_value_t = 512)]
+    #[arg(long, default_value_t = AnalysisOptions::default().hop)]
     pub hop: usize,
 
     /// Frequency bands the onset detector splits the spectrum into.
-    #[arg(long, default_value_t = 8)]
+    #[arg(long, default_value_t = AnalysisOptions::default().onset_bands)]
     pub onset_bands: usize,
 
     /// Gamma of the logarithmic compression applied before the flux.
-    #[arg(long, default_value_t = 1000.0)]
+    #[arg(long, default_value_t = AnalysisOptions::default().compression)]
     pub compression: f32,
 
     /// Width of the moving average subtracted from the flux, in seconds.
-    #[arg(long, default_value_t = 0.5)]
+    #[arg(long, default_value_t = AnalysisOptions::default().local_mean)]
     pub local_mean: f64,
 
     /// Slowest tempo searched. Wide enough that an octave error stays inside
     /// the range and visible, rather than being clipped out of it.
-    #[arg(long, default_value_t = 60.0)]
+    #[arg(long, default_value_t = AnalysisOptions::default().min_bpm)]
     pub min_bpm: f64,
 
     /// Fastest tempo searched.
-    #[arg(long, default_value_t = 220.0)]
+    #[arg(long, default_value_t = AnalysisOptions::default().max_bpm)]
     pub max_bpm: f64,
 
     /// Spacing of the tempo grid, in BPM. The answer is refined between grid
     /// points, so this sets the cost of the search rather than the precision.
-    #[arg(long, default_value_t = 0.1)]
+    #[arg(long, default_value_t = AnalysisOptions::default().bpm_resolution)]
     pub bpm_resolution: f64,
 
     /// Comb teeth used by the tempo salience.
-    #[arg(long, default_value_t = 4)]
+    #[arg(long, default_value_t = AnalysisOptions::default().pulses)]
     pub pulses: usize,
 
     /// Weight of the penalty applied between comb teeth, in [0, 1]. At 0 the
     /// salience is a plain harmonic sum, which favours slow metrical levels; at
     /// 1 it argues hardest against them, and against any tempo whose offbeats
     /// carry weight.
-    #[arg(long, default_value_t = 0.0)]
+    #[arg(long, default_value_t = AnalysisOptions::default().comb_penalty)]
     pub comb_penalty: f64,
 
     /// Slowest metrical level the answer may be reported at, in BPM. Set to 0
     /// to report whatever the salience curve says, subharmonic and all.
-    #[arg(long, default_value_t = 90.0)]
+    #[arg(long, default_value_t = AnalysisOptions::default().metrical_floor)]
     pub metrical_floor: f64,
 
     /// How strong the doubled candidate must be, relative to the original, for
     /// the metrical floor to double it.
-    #[arg(long, default_value_t = 0.5)]
+    #[arg(long, default_value_t = AnalysisOptions::default().metrical_floor_ratio)]
     pub metrical_floor_ratio: f64,
 
     /// Largest gap, in BPM, the answer may be moved by to reach a whole number.
     /// Produced music is written on integers, so the default closes this tool's
     /// own error and nothing wider. Set to 0.5 to round whatever was measured,
     /// or to 0 to report it as measured.
-    #[arg(long, default_value_t = 0.25)]
+    #[arg(long, default_value_t = AnalysisOptions::default().integer_snap)]
     pub integer_snap: f64,
 
     /// Centre of a log-normal tempo prior, in BPM. Off unless given, because a
@@ -116,16 +120,40 @@ pub struct AnalysisOptions {
     pub tempo_prior: Option<f64>,
 
     /// Width of the tempo prior, in octaves.
-    #[arg(long, default_value_t = 0.7)]
+    #[arg(long, default_value_t = AnalysisOptions::default().tempo_prior_width)]
     pub tempo_prior_width: f64,
 
     /// Key profile to correlate the chroma against.
-    #[arg(long, default_value = "temperley")]
+    #[arg(long, default_value_t = AnalysisOptions::default().key_profile)]
     pub key_profile: Profile,
 
     /// Override the measured tuning offset, in cents from A = 440 Hz.
     #[arg(long)]
     pub tuning_cents: Option<f64>,
+}
+
+impl From<&AnalysisArgs> for AnalysisOptions {
+    fn from(args: &AnalysisArgs) -> Self {
+        AnalysisOptions {
+            window: args.window,
+            hop: args.hop,
+            onset_bands: args.onset_bands,
+            compression: args.compression,
+            local_mean: args.local_mean,
+            min_bpm: args.min_bpm,
+            max_bpm: args.max_bpm,
+            bpm_resolution: args.bpm_resolution,
+            pulses: args.pulses,
+            comb_penalty: args.comb_penalty,
+            metrical_floor: args.metrical_floor,
+            metrical_floor_ratio: args.metrical_floor_ratio,
+            integer_snap: args.integer_snap,
+            tempo_prior: args.tempo_prior,
+            tempo_prior_width: args.tempo_prior_width,
+            key_profile: args.key_profile,
+            tuning_cents: args.tuning_cents,
+        }
+    }
 }
 
 #[derive(Args)]
@@ -164,7 +192,7 @@ struct AnalyzeArgs {
     print_json: bool,
 
     #[command(flatten)]
-    options: AnalysisOptions,
+    options: AnalysisArgs,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
@@ -194,7 +222,7 @@ struct RenameArgs {
     reports: Option<PathBuf>,
 
     #[command(flatten)]
-    options: AnalysisOptions,
+    options: AnalysisArgs,
 }
 
 #[derive(Args)]
@@ -241,7 +269,7 @@ struct SelftestArgs {
     seconds: f64,
 
     #[command(flatten)]
-    options: AnalysisOptions,
+    options: AnalysisArgs,
 }
 
 fn main() -> Result<()> {
@@ -261,7 +289,7 @@ fn analyze(args: AnalyzeArgs) -> Result<()> {
 
     let outcome = pipeline::run(
         &excerpt,
-        &args.options,
+        &AnalysisOptions::from(&args.options),
         pipeline::Source {
             path: args.file.display().to_string(),
             duration_seconds: duration,
@@ -294,7 +322,10 @@ fn analyze(args: AnalyzeArgs) -> Result<()> {
         let plot_start = args
             .plot_start
             .unwrap_or(source.analysed_start_seconds + source.analysed_seconds * 0.25);
-        figures::write_all(&out, &outcome, plot_start, args.plot_window)?;
+        write_artefacts(
+            &out,
+            pipeline::figures(&outcome, plot_start, args.plot_window),
+        )?;
     }
 
     // The summary goes to stderr when the JSON is on stdout, so a pipe into jq
@@ -339,7 +370,7 @@ fn rename_files(args: RenameArgs) -> Result<()> {
         let duration = decoded.duration_seconds();
         let outcome = pipeline::run(
             &decoded,
-            &args.options,
+            &AnalysisOptions::from(&args.options),
             pipeline::Source {
                 path: file.display().to_string(),
                 duration_seconds: duration,
@@ -389,11 +420,25 @@ fn rename_files(args: RenameArgs) -> Result<()> {
     Ok(())
 }
 
+/// Write what `pipeline::figures` drew into a directory.
+///
+/// The names are the ones the HTML references, so writing them side by side is
+/// the whole of what turning artefacts into a readable report directory takes.
+fn write_artefacts(out: &std::path::Path, artefacts: pipeline::Artefacts) -> Result<()> {
+    for (name, bytes) in artefacts.binary {
+        std::fs::write(out.join(&name), bytes).with_context(|| format!("writing {name}"))?;
+    }
+    for (name, text) in artefacts.text {
+        std::fs::write(out.join(&name), text).with_context(|| format!("writing {name}"))?;
+    }
+    Ok(())
+}
+
 fn selftest(args: SelftestArgs) -> Result<()> {
     let generated = audio::synth::click_train(args.bpm, args.seconds, 44100);
     let outcome = pipeline::run(
         &generated,
-        &args.options,
+        &AnalysisOptions::from(&args.options),
         pipeline::Source {
             path: format!("synthetic pulse train at {:.2} BPM", args.bpm),
             duration_seconds: args.seconds,

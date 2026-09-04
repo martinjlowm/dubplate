@@ -55,6 +55,13 @@ fmt:
 fmt-check:
     treefmt --fail-on-change
 
+# Build the analysis for the browser, which is what keeps it free of the host.
+#
+# A `std::fs` call or a clock reads fine on a laptop and panics in a tab, and
+# the compiler is the only thing that catches the difference.
+check-wasm:
+    cargo check --release --target wasm32-unknown-unknown -p pipeline -p rekordbox
+
 # Regenerate .github/workflows from infrastructure/ci-cd/main.ts (cdkactions)
 synth-workflows:
     cd infrastructure/ci-cd && bun install --frozen-lockfile && bun main.ts
@@ -76,4 +83,4 @@ build-nix:
     devenv build outputs.dubplate
 
 # All PR gates
-check: fmt-check lint test check-cargo-nix check-workflows
+check: fmt-check lint test check-wasm check-cargo-nix check-workflows

@@ -1,11 +1,27 @@
 //! The figures, and the note under each one saying what it would look like if
 //! the stage above it had gone wrong.
+//!
+//! Everything comes back as bytes and strings rather than as files. The CLI
+//! writes them into a directory; a browser hands them to the page. Neither
+//! choice belongs to the code that draws them.
 
-use crate::pipeline::Outcome;
-use anyhow::Result;
+use crate::Outcome;
 use report::html::{Figure, page};
 use report::{BarChart, LinePlot, Marker, Series};
-use std::path::Path;
+
+/// What a run draws: the page, the figures it references, and the spectrogram
+/// raster the spectrogram figure points at.
+///
+/// Names are the file names the HTML references, so a caller that writes them
+/// into one directory gets a page that works, and a caller that serves them
+/// from memory has the keys it needs.
+#[derive(Default)]
+pub struct Artefacts {
+    /// SVG and HTML, in the order they were drawn. `report.html` is last.
+    pub text: Vec<(String, String)>,
+    /// The PNG the spectrogram figure references.
+    pub binary: Vec<(String, Vec<u8>)>,
+}
 
 const NOVELTY_COLOUR: &str = "#0f766e";
 const COMB_COLOUR: &str = "#2563eb";
@@ -15,15 +31,24 @@ const FOURIER_COLOUR: &str = "#c2410c";
 // peaks, so they have to be the most readable thing in the figure.
 const BEAT_COLOUR: &str = "#475569";
 
-pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f64) -> Result<()> {
+pub fn figures(outcome: &Outcome, plot_start: f64, plot_window: f64) -> Artefacts {
     let report = &outcome.report;
     let mut figures = Vec::new();
 
-    outcome
-        .spectrogram
-        .write_png(&out.join("spectrogram.png"))?;
+    let mut artefacts = Artefacts::default();
+    artefacts.binary.push((
+        "spectrogram.png".into(),
+        // The encoder writes to a Vec, so this cannot fail for a reason a caller
+        // could act on.
+        outcome
+            .spectrogram
+            .to_png_bytes()
+            .expect("a PNG encoder writing to memory"),
+    ));
     let spectrogram = outcome.spectrogram.to_svg("spectrogram.png");
-    std::fs::write(out.join("spectrogram.svg"), &spectrogram)?;
+    artefacts
+        .text
+        .push(("spectrogram.svg".into(), spectrogram.clone()));
     figures.push(Figure {
         caption: "Spectrogram".into(),
         file: "spectrogram.svg".into(),
@@ -31,8 +56,8 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
         inline: Some(spectrogram),
     });
 
-    std::fs::write(
-        out.join("spectrum.svg"),
+    artefacts.text.push((
+        "spectrum.svg".into(),
         LinePlot::new("Long-term average spectrum", "frequency (Hz)", "level (dB)")
             .log_x()
             .x_range(
@@ -49,7 +74,7 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
                 outcome.average_spectrum.clone(),
             ))
             .to_svg(),
-    )?;
+    ));
     figures.push(Figure {
         caption: "Long-term average spectrum".into(),
         file: "spectrum.svg".into(),
@@ -90,7 +115,9 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
             });
         }
     }
-    std::fs::write(out.join("novelty.svg"), novelty_plot.to_svg())?;
+    artefacts
+        .text
+        .push(("novelty.svg".into(), novelty_plot.to_svg()));
     figures.push(Figure {
         caption: "Onset novelty against the beat grid".into(),
         file: "novelty.svg".into(),
@@ -135,7 +162,9 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
             dashed: true,
         });
     }
-    std::fs::write(out.join("tempo-salience.svg"), salience_plot.to_svg())?;
+    artefacts
+        .text
+        .push(("tempo-salience.svg".into(), salience_plot.to_svg()));
     figures.push(Figure {
         caption: "Tempo salience".into(),
         file: "tempo-salience.svg".into(),
@@ -144,8 +173,8 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
     });
 
     if !report.tempo.over_time.is_empty() {
-        std::fs::write(
-            out.join("tempo-over-time.svg"),
+        artefacts.text.push((
+            "tempo-over-time.svg".into(),
             LinePlot::new("Tempo per window", "time (s)", "tempo (BPM)")
                 .series(Series::new(
                     "window estimate",
@@ -164,7 +193,7 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
                     dashed: false,
                 })
                 .to_svg(),
-        )?;
+        ));
         figures.push(Figure {
             caption: "Tempo per window".into(),
             file: "tempo-over-time.svg".into(),
@@ -176,8 +205,8 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
     const PITCH_CLASSES: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];
-    std::fs::write(
-        out.join("chroma.svg"),
+    artefacts.text.push((
+        "chroma.svg".into(),
         BarChart::new(
             format!(
                 "Pitch-class energy for {} ({:+.0} cents from A = 440 Hz)",
@@ -192,7 +221,7 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
         )
         .highlight(report.key.key.tonic as usize)
         .to_svg(),
-    )?;
+    ));
     figures.push(Figure {
         caption: "Pitch-class energy".into(),
         file: "chroma.svg".into(),
@@ -200,8 +229,8 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
         inline: None,
     });
 
-    std::fs::write(
-        out.join("key-correlations.svg"),
+    artefacts.text.push((
+        "key-correlations.svg".into(),
         BarChart::new(
             "Key correlations",
             "correlation",
@@ -215,7 +244,7 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
         )
         .highlight(0)
         .to_svg(),
-    )?;
+    ));
     figures.push(Figure {
         caption: "Key correlations".into(),
         file: "key-correlations.svg".into(),
@@ -223,6 +252,8 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
         inline: None,
     });
 
-    std::fs::write(out.join("report.html"), page(report, &figures))?;
-    Ok(())
+    artefacts
+        .text
+        .push(("report.html".into(), page(report, &figures)));
+    artefacts
 }

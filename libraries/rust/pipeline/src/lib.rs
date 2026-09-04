@@ -4,15 +4,46 @@
 //! and key over what it collected. Only the tuning offset needs its own pass,
 //! because the chroma mapping is built around it and cannot be corrected after
 //! the fold.
+//!
+//! Nothing here touches a file, a clock or an environment variable. The audio
+//! arrives as samples and the figures leave as bytes, which is what lets the
+//! same code run behind the CLI and inside a browser.
 
-use crate::AnalysisOptions;
-use anyhow::{Result, bail};
+mod figures;
+mod options;
+
+pub use figures::{Artefacts, figures};
+pub use options::AnalysisOptions;
+
 use audio::Audio;
 use report::{
     AnalysisReport, AnalysisSettings, BandTempo, Heatmap, SourceInfo, SpectrumSummary, Waveforms,
 };
 use spectral::{ChromaMapper, LogBands, Stft, TuningEstimator};
+use std::fmt;
 use tempo::{FluxAccumulator, Novelty, TempoPrior, TempoSettings};
+
+/// The one way this can fail. A typed error rather than `anyhow`, because a
+/// library saying what went wrong is what lets the CLI and a browser each
+/// report it their own way.
+#[derive(Clone, Copy, Debug)]
+pub enum Error {
+    /// Fewer than two windows of the stability trace. One measurement with
+    /// nothing to compare it against is not an answer.
+    TooShort { seconds: f64 },
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::TooShort { seconds } => {
+                write!(f, "need at least 30 seconds of audio, got {seconds:.1}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 /// Columns and rows of the spectrogram image. The width is a compromise between
 /// a legible page and a pixel per frame; at 1600 columns a seven-minute track
@@ -42,17 +73,16 @@ pub struct Outcome {
     pub broadband: Novelty,
 }
 
-pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<Outcome> {
+pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<Outcome, Error> {
     let mut stft = Stft::new(options.window, options.hop);
     let frames = stft.frame_count(audio.samples.len());
     let frame_rate = stft.frame_rate(audio.sample_rate);
     // Two windows of the stability trace. Less than that and the answer rests on
     // one measurement with nothing to compare it against.
     if (frames as f64 / frame_rate) < 30.0 {
-        bail!(
-            "need at least 30 seconds of audio, got {:.1}",
-            frames as f64 / frame_rate
-        );
+        return Err(Error::TooShort {
+            seconds: frames as f64 / frame_rate,
+        });
     }
 
     let tuning_cents = match options.tuning_cents {

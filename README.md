@@ -159,6 +159,7 @@ WAV file.
      measured  126.02 BPM, snapped -0.02 BPM to a whole number
      grid      92% of beats within 50 ms, pulse 8.27x the mean, bar phase 1 (contrast 1.47)
      windows   median 126.02 BPM, spread 0.01 BPM, 88% agree
+     levels    63 92%/8.8x, 84 83%/5.7x, 189 86%/3.1x, 252 83%/5.7x
      also      63.02 (0.89), 83.99 (0.52), 167.96 (0.42)
      - metrical-floor-applied: the strongest candidate was 63.02 BPM (salience 0.887); the
        answer was doubled to 126.02 BPM (salience 0.854) to clear the metrical floor
@@ -428,7 +429,8 @@ committed graph and the manifests disagree.
 | `libraries/rust/key-detect/` | Chroma to key by profile correlation, in Camelot notation. |
 | `libraries/rust/diagnostics/` | The finding type every stage reports its doubts in. |
 | `libraries/rust/report/` | The JSON report, the SVG plots, the PNG spectrogram, the HTML page. |
-| `tools/rust/dubplate/` | The CLI: one analysis pass, one output directory. |
+| `libraries/rust/pipeline/` | The analysis pass, the figures it draws, and the settings both take. Samples in, a report and named artefacts out, so the same code runs behind the CLI and in a browser. |
+| `tools/rust/dubplate/` | The CLI: flags in, one output directory out. |
 | `libraries/rust/collection/` | The device-neutral track model both exporters read, and the reader that builds it from a report. |
 | `libraries/rust/waveform/` | The two waveforms a player draws, at the resolutions their formats read. |
 | `libraries/rust/rekordbox/` | `export.pdb` and the `ANLZ` files, with the reference parser as the test oracle. |

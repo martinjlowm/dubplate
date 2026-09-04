@@ -9,7 +9,7 @@
 use crate::plot::escape;
 use std::fmt::Write as _;
 use std::fs::File;
-use std::io::{self, BufWriter};
+use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 const MARGIN_LEFT: f64 = 68.0;
@@ -33,22 +33,33 @@ pub struct Heatmap {
 }
 
 impl Heatmap {
-    pub fn write_png(&self, path: &Path) -> io::Result<()> {
-        let file = BufWriter::new(File::create(path)?);
-        let mut encoder = png::Encoder::new(file, self.width as u32, self.height as u32);
-        encoder.set_color(png::ColorType::Rgb);
-        encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder.write_header()?;
+    /// The PNG as bytes.
+    ///
+    /// Bytes rather than a file, because the same encoder runs in a browser
+    /// where there is nowhere to put a path. `write_png` is this plus a write.
+    pub fn to_png_bytes(&self) -> io::Result<Vec<u8>> {
+        let mut out = Vec::with_capacity(self.width * self.height);
+        {
+            let mut encoder = png::Encoder::new(&mut out, self.width as u32, self.height as u32);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header()?;
 
-        let span = (self.ceiling_db - self.floor_db).max(f32::MIN_POSITIVE);
-        let mut pixels = Vec::with_capacity(self.width * self.height * 3);
-        for value in &self.values {
-            let level = ((value - self.floor_db) / span).clamp(0.0, 1.0);
-            let [r, g, b] = colour(level);
-            pixels.extend_from_slice(&[r, g, b]);
+            let span = (self.ceiling_db - self.floor_db).max(f32::MIN_POSITIVE);
+            let mut pixels = Vec::with_capacity(self.width * self.height * 3);
+            for value in &self.values {
+                let level = ((value - self.floor_db) / span).clamp(0.0, 1.0);
+                let [r, g, b] = colour(level);
+                pixels.extend_from_slice(&[r, g, b]);
+            }
+            writer.write_image_data(&pixels)?;
         }
-        writer.write_image_data(&pixels)?;
-        Ok(())
+        Ok(out)
+    }
+
+    pub fn write_png(&self, path: &Path) -> io::Result<()> {
+        let mut file = BufWriter::new(File::create(path)?);
+        file.write_all(&self.to_png_bytes()?)
     }
 
     /// An SVG that draws the axes around `png_href`, which is resolved relative

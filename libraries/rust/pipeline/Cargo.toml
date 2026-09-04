@@ -1,0 +1,19 @@
+[package]
+name = "pipeline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+audio.workspace = true
+key-detect.workspace = true
+report.workspace = true
+spectral.workspace = true
+tempo.workspace = true
+waveform.workspace = true
+
+[dev-dependencies]
+audio.workspace = true

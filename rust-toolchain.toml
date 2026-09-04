@@ -5,3 +5,6 @@
 [toolchain]
 channel = "1.95"
 components = ["rust-src", "rustfmt", "clippy"]
+# The analysis library is built for the browser as well as for the host. Listing
+# the target here is what puts its std in the dev shell and in the Nix build.
+targets = ["wasm32-unknown-unknown"]

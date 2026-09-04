@@ -19,8 +19,12 @@ is the wrong trade.
 - `libraries/rust/key-detect` chroma to key by profile correlation, with Camelot notation.
 - `libraries/rust/diagnostics` the finding type every stage reports doubts in.
 - `libraries/rust/report` the JSON report, the SVG plots, the PNG spectrogram, the HTML page.
-- `tools/rust/dubplate` the CLI. `pipeline.rs` runs the pass, `figures.rs` draws,
-  `summary.rs` prints, `rename.rs` builds the `<BPM>_<KEY>_<rest>` name.
+- `libraries/rust/pipeline` the pass itself: `lib.rs` runs every stage over one transform,
+  `figures.rs` draws, `options.rs` holds the settings and their defaults. Samples in, a report
+  and a set of named artefacts out, with no file, clock or environment touched.
+- `tools/rust/dubplate` the CLI. `main.rs` parses flags and writes what the pipeline returned,
+  `summary.rs` prints, `rename.rs` builds the `<BPM>_<KEY>_<rest>` name, `export.rs` writes a
+  device.
 - `libraries/rust/collection` the device-neutral track model, and the reader that builds one
   from a report. Neither exporter knows how the numbers were measured.
 - `libraries/rust/waveform` the columns both target formats draw, computed once.
@@ -101,6 +105,13 @@ edit to `Cargo.toml`.
 18. **Dates come from `SOURCE_DATE_EPOCH` when it is set.** Otherwise the same library
     exports to two different images, which makes every Nix rebuild copy gigabytes for a field
     nobody can hear.
+19. **The analysis touches no file, clock or environment variable.** `libraries/rust/pipeline`
+    takes samples and returns a report and named artefacts; opening the file, writing the
+    artefacts and deciding what today is belong to the CLI. That is what lets the same code
+    run in a browser, where `std::fs` compiles and then panics, and `just check-wasm` is the
+    gate that catches a regression: `cargo check --target wasm32-unknown-unknown` over the
+    pipeline and the rekordbox exporter. A `SystemTime::now()` added to a library reads fine
+    on a laptop and takes the wasm build with it.
 
 ## 3. What a change to the algorithm has to show
 

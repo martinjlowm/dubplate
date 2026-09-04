@@ -323,6 +323,7 @@ dependencies = [
  "engine",
  "hound",
  "key-detect",
+ "pipeline",
  "rekordbox",
  "report",
  "serde_json",
@@ -617,6 +618,18 @@ dependencies = [
  "regex-syntax",
  "structmeta",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "pipeline"
+version = "0.1.0"
+dependencies = [
+ "audio",
+ "key-detect",
+ "report",
+ "spectral",
+ "tempo",
+ "waveform",
 ]
 
 [[package]]

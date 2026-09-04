@@ -22,6 +22,7 @@ diagnostics = { path = "libraries/rust/diagnostics" }
 spectral = { path = "libraries/rust/spectral" }
 tempo = { path = "libraries/rust/tempo" }
 key-detect = { path = "libraries/rust/key-detect" }
+pipeline = { path = "libraries/rust/pipeline" }
 report = { path = "libraries/rust/report" }
 waveform = { path = "libraries/rust/waveform" }
 

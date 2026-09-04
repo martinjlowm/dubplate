@@ -60,3 +60,14 @@ impl std::str::FromStr for Profile {
         }
     }
 }
+
+/// The inverse of `from_str`, so a caller can print the default it is about to
+/// use and get a string that parses back.
+impl std::fmt::Display for Profile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Profile::Krumhansl => "krumhansl",
+            Profile::Temperley => "temperley",
+        })
+    }
+}

@@ -15,6 +15,7 @@ key-detect.workspace = true
 collection.workspace = true
 engine.workspace = true
 rekordbox.workspace = true
+pipeline.workspace = true
 report.workspace = true
 spectral.workspace = true
 tempo.workspace = true

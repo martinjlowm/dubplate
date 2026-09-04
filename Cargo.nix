@@ -103,6 +103,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "pipeline" = rec {
+      packageId = "pipeline";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "pipeline";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "rekordbox" = rec {
       packageId = "rekordbox";
       build = internal.buildRustCrateWithFeatures {
@@ -1025,6 +1035,10 @@ rec {
             packageId = "key-detect";
           }
           {
+            name = "pipeline";
+            packageId = "pipeline";
+          }
+          {
             name = "rekordbox";
             packageId = "rekordbox";
           }
@@ -1809,6 +1823,45 @@ rec {
         features = {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
+      };
+      "pipeline" = rec {
+        crateName = "pipeline";
+        version = "0.1.0";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./libraries/rust/pipeline; };
+        dependencies = [
+          {
+            name = "audio";
+            packageId = "audio";
+          }
+          {
+            name = "key-detect";
+            packageId = "key-detect";
+          }
+          {
+            name = "report";
+            packageId = "report";
+          }
+          {
+            name = "spectral";
+            packageId = "spectral";
+          }
+          {
+            name = "tempo";
+            packageId = "tempo";
+          }
+          {
+            name = "waveform";
+            packageId = "waveform";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "audio";
+            packageId = "audio";
+          }
+        ];
+
       };
       "pkg-config" = rec {
         crateName = "pkg-config";

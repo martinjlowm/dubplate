@@ -62,7 +62,19 @@ impl Audio {
     /// metadata between `fmt ` and `data`, and a fixed-offset reader lands in the
     /// middle of it and reads the artist name as audio.
     pub fn from_wav(path: &Path) -> Result<Self, DecodeError> {
-        let mut reader = hound::WavReader::open(path)?;
+        Self::decode(hound::WavReader::open(path)?)
+    }
+
+    /// Decode a WAV already in memory.
+    ///
+    /// The same decoder as `from_wav`, for callers that never had a path: a
+    /// browser is handed an `ArrayBuffer`, and the archive pipeline reads a zip
+    /// entry. `from_wav` is this plus opening the file.
+    pub fn from_wav_bytes(wav: &[u8]) -> Result<Self, DecodeError> {
+        Self::decode(hound::WavReader::new(std::io::Cursor::new(wav))?)
+    }
+
+    fn decode<R: std::io::Read>(mut reader: hound::WavReader<R>) -> Result<Self, DecodeError> {
         let spec = reader.spec();
         let channels = spec.channels.max(1) as usize;
 
