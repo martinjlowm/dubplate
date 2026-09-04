@@ -1,7 +1,7 @@
 //! The terminal summary: the answer, the reasons to doubt it, and where to look.
 
 use diagnostics::Severity;
-use report::AnalysisReport;
+use report::{AnalysisReport, format_bpm};
 use std::io::Write;
 use std::path::Path;
 
@@ -14,12 +14,24 @@ pub fn print(report: &AnalysisReport, out: &Path, no_figures: bool, to: &mut dyn
     let analysed = report.source.analysed_seconds.round() as i64;
     let _ = writeln!(
         to,
-        "{:.2} BPM   {}   {}:{:02} analysed",
-        tempo.bpm,
+        "{} BPM   {}   {}:{:02} analysed",
+        format_bpm(tempo.bpm),
         report.key.camelot,
         analysed / 60,
         analysed % 60
     );
+    // The measurement, whenever the snap moved the answer. Printed on the
+    // headline rather than left in the JSON: an answer of 138 that came from
+    // 137.62 is a different claim from one that came from 137.99, and the
+    // reader deciding whether to trust the grid needs the difference here.
+    if (tempo.bpm - tempo.bpm_measured).abs() > 1e-9 {
+        let _ = writeln!(
+            to,
+            "  measured  {:.2} BPM, snapped {:+.2} BPM to a whole number",
+            tempo.bpm_measured,
+            tempo.bpm - tempo.bpm_measured
+        );
+    }
     let _ = writeln!(
         to,
         "  grid      {:.0}% of beats within {:.0} ms, pulse {:.2}x the mean, bar phase {} (contrast {:.2})",

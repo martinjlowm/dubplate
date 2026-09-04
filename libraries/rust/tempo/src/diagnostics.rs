@@ -5,7 +5,7 @@
 //! detector that quietly corrects itself is the thing this tool exists to
 //! troubleshoot.
 
-use crate::TempoAnalysis;
+use crate::{TempoAnalysis, format_bpm};
 pub use diagnostics::{Diagnostic, Severity};
 
 /// Relative salience above which a competing tempo counts as a real rival
@@ -15,6 +15,8 @@ const RIVAL_THRESHOLD: f64 = 0.85;
 pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     let bpm = analysis.bpm;
+    // Every message that quotes the answer quotes it the way the headline does.
+    let reported = format_bpm(bpm);
 
     let Some(strongest) = analysis.candidates.first() else {
         out.push(Diagnostic::warning(
@@ -43,14 +45,29 @@ pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
             out.push(Diagnostic::warning(
                 "octave-ambiguity",
                 format!(
-                    "{:.2} BPM ({}) scores {:.0}% of {:.2} BPM, so the octave is decided by a margin too small to defend",
+                    "{:.2} BPM ({}) scores {:.0}% of {} BPM, so the octave is decided by a margin too small to defend",
                     relative.bpm,
                     relative.label,
                     ratio * 100.0,
-                    bpm
+                    reported
                 ),
             ));
         }
+    }
+
+    // The snap was asked for and refused. Rounding here would have moved the
+    // grid by more than the tolerance allows, which is a beat of drift every
+    // few minutes on a file a player reads the grid straight out of.
+    let snap = analysis.settings.integer_snap_bpm;
+    let off_integer = (analysis.bpm_measured - analysis.bpm_measured.round()).abs();
+    if snap > 0.0 && off_integer > snap {
+        out.push(Diagnostic::warning(
+            "non-integer-tempo",
+            format!(
+                "{:.2} BPM sits {:.2} BPM from the nearest whole number, further than the {snap:.2} BPM the snap allows, so the measurement is the answer: produced music is written on integers, so this was played rather than rendered, or the grid drifts across the file",
+                analysis.bpm_measured, off_integer
+            ),
+        ));
     }
 
     if let Some(shift) = &analysis.octave_shift {
@@ -97,7 +114,7 @@ pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
             out.push(Diagnostic::warning(
                 "estimators-disagree",
                 format!(
-                    "the Fourier tempogram peaks at {fourier_bpm:.2} BPM against {bpm:.2} from autocorrelation; both read the same curve, so one of them is being misled by the shape of the pulse"
+                    "the Fourier tempogram peaks at {fourier_bpm:.2} BPM against {reported} from autocorrelation; both read the same curve, so one of them is being misled by the shape of the pulse"
                 ),
             ));
         }
@@ -151,8 +168,8 @@ pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
         out.push(Diagnostic::warning(
             "prior-changed-answer",
             format!(
-                "without the tempo prior the winner is {:.2} BPM, not {:.2}: the answer is the prior's, not the track's",
-                first.bpm, bpm
+                "without the tempo prior the winner is {:.2} BPM, not {}: the answer is the prior's, not the track's",
+                first.bpm, reported
             ),
         ));
     }
@@ -162,7 +179,7 @@ pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
         out.push(Diagnostic::warning(
             "range-edge",
             format!(
-                "{bpm:.2} BPM sits at the edge of the {:.0}-{:.0} BPM search range, so a stronger candidate may lie outside it",
+                "{reported} BPM sits at the edge of the {:.0}-{:.0} BPM search range, so a stronger candidate may lie outside it",
                 settings.min_bpm, settings.max_bpm
             ),
         ));

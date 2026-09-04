@@ -11,6 +11,9 @@ pub mod plot;
 
 pub use heatmap::Heatmap;
 pub use plot::{BarChart, LinePlot, Marker, Series};
+/// Re-exported so the display code takes its tempo formatting from the same
+/// place the findings do.
+pub use tempo::format_bpm;
 
 use diagnostics::{Diagnostic, Severity};
 use key_detect::KeyAnalysis;

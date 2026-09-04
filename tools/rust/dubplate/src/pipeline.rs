@@ -135,6 +135,7 @@ pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<O
             bpm: options.metrical_floor,
             min_salience_ratio: options.metrical_floor_ratio,
         }),
+        integer_snap_bpm: options.integer_snap,
     };
     let tempo_analysis = tempo::analyze(&broadband, &low_band, &settings);
 

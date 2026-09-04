@@ -40,8 +40,15 @@ pub struct TempoStability {
 pub struct TempoAnalysis {
     pub settings: TempoSettings,
     /// The reported tempo. Equal to the strongest candidate unless the metrical
-    /// floor raised it, which `octave_shift` then records.
+    /// floor raised it, which `octave_shift` then records, or the snap to a
+    /// whole number moved it, which `bpm_measured` then shows.
     pub bpm: f64,
+    /// The tempo as measured, before the snap to a whole number.
+    ///
+    /// The two differ by at most `settings.integer_snap_bpm`. This is the
+    /// number to read when a grid drifts and the number the selftest checks,
+    /// since a rounded answer would hide the error it exists to measure.
+    pub bpm_measured: f64,
     /// Salience of the reported tempo, which is what every ratio in the
     /// diagnostics is measured against.
     pub salience: f64,
@@ -60,6 +67,20 @@ pub struct TempoAnalysis {
     pub comb_curve: TempoCurve,
     #[serde(skip)]
     pub fourier_curve: TempoCurve,
+}
+
+/// A tempo as it is written for a reader: `138` when it is a whole number,
+/// `137.62` when it is not.
+///
+/// One function, because the findings, the terminal summary, the page and the
+/// figure titles all state the same answer, and two decimals on a whole number
+/// claim a precision the measurement does not have.
+pub fn format_bpm(bpm: f64) -> String {
+    if bpm.is_finite() && (bpm - bpm.round()).abs() < 1e-9 {
+        format!("{bpm:.0}")
+    } else {
+        format!("{bpm:.2}")
+    }
 }
 
 /// Window geometry for the stability trace, in seconds.
@@ -100,7 +121,13 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
     });
 
     let strongest = candidates.first().map(|c| c.bpm).unwrap_or(f64::NAN);
-    let (bpm, octave_shift) = tempogram::apply_floor(&comb, strongest, settings.floor);
+    let (bpm_measured, octave_shift) = tempogram::apply_floor(&comb, strongest, settings.floor);
+    // Snapped here rather than where the number is printed. The grid, the
+    // window comparison, the file name and both device databases all take the
+    // reported tempo, and a grid fitted at 137.99 under an answer of 138 is a
+    // grid a reader cannot check the answer against.
+    let bpm =
+        tempogram::snap_to_integer(bpm_measured, settings.integer_snap_bpm).unwrap_or(bpm_measured);
     let grid = beats::align(broadband, bpm, GRID_TOLERANCE_MS);
     let bar = beats::bar_phase(&grid, low_band, 4);
     let over_time = tempogram::tempo_over_time(
@@ -115,6 +142,7 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
     let mut analysis = TempoAnalysis {
         settings: settings.clone(),
         bpm,
+        bpm_measured,
         salience: comb.salience_at(bpm),
         octave_shift,
         candidates,

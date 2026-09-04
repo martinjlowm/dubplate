@@ -103,6 +103,13 @@ pub struct AnalysisOptions {
     #[arg(long, default_value_t = 0.5)]
     pub metrical_floor_ratio: f64,
 
+    /// Largest gap, in BPM, the answer may be moved by to reach a whole number.
+    /// Produced music is written on integers, so the default closes this tool's
+    /// own error and nothing wider. Set to 0.5 to round whatever was measured,
+    /// or to 0 to report it as measured.
+    #[arg(long, default_value_t = 0.25)]
+    pub integer_snap: f64,
+
     /// Centre of a log-normal tempo prior, in BPM. Off unless given, because a
     /// prior is how a detector reports the tempo it expected.
     #[arg(long)]
@@ -394,7 +401,10 @@ fn selftest(args: SelftestArgs) -> Result<()> {
         },
     )?;
 
-    let measured = outcome.report.tempo.bpm;
+    // The measurement, not the reported answer: a tempo snapped to a whole
+    // number would report zero error against a generated 174 BPM and hide the
+    // thing this command exists to measure.
+    let measured = outcome.report.tempo.bpm_measured;
     let error = (measured - args.bpm).abs();
     println!(
         "generated {:.2} BPM, measured {:.2} BPM, error {:.3} BPM ({:.2}%)",

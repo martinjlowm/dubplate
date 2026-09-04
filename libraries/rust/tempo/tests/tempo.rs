@@ -98,3 +98,59 @@ fn the_metrical_floor_doubles_and_says_so() {
     assert_eq!(unchanged, 70.0);
     assert!(none.is_none());
 }
+
+#[test]
+fn the_answer_is_a_whole_number_and_the_measurement_survives() {
+    // 128 BPM generated exactly. The estimator lands a few hundredths off,
+    // which is its own error rather than the track's, and that is the gap the
+    // snap closes.
+    let (broadband, low) = novelty(128.0, 60.0);
+    let analysis = tempo::analyze(&broadband, &low, &TempoSettings::default());
+
+    assert_eq!(
+        analysis.bpm,
+        analysis.bpm.round(),
+        "reported {:.4} BPM, which is not a whole number",
+        analysis.bpm
+    );
+    assert_eq!(analysis.bpm, 128.0, "reported {:.4} BPM", analysis.bpm);
+    assert!(
+        (analysis.bpm_measured - 128.0).abs() > 0.0 && (analysis.bpm_measured - 128.0).abs() < 0.25,
+        "measured {:.4} BPM, which is either exact or outside the snap",
+        analysis.bpm_measured
+    );
+    assert_eq!(
+        tempo::format_bpm(analysis.bpm),
+        "128",
+        "the headline writes {}",
+        tempo::format_bpm(analysis.bpm)
+    );
+
+    // With the snap off the measurement is the answer, decimals and all.
+    let measured_only = TempoSettings {
+        integer_snap_bpm: 0.0,
+        ..TempoSettings::default()
+    };
+    let unsnapped = tempo::analyze(&broadband, &low, &measured_only);
+    assert_eq!(unsnapped.bpm, unsnapped.bpm_measured);
+    assert_ne!(unsnapped.bpm, unsnapped.bpm.round());
+}
+
+#[test]
+fn a_tempo_between_two_integers_keeps_its_measurement_and_says_why() {
+    // 127.5 BPM is a tempo no producer types in, and the snap has to leave it
+    // alone rather than move the grid a quarter of a beat per bar.
+    let (broadband, low) = novelty(127.5, 60.0);
+    let analysis = tempo::analyze(&broadband, &low, &TempoSettings::default());
+
+    assert!(
+        (analysis.bpm - 127.5).abs() < 0.2,
+        "reported {:.2} BPM instead of the measurement",
+        analysis.bpm
+    );
+    let codes: Vec<&str> = analysis.diagnostics.iter().map(|d| d.code).collect();
+    assert!(
+        codes.contains(&"non-integer-tempo"),
+        "a tempo half way between two integers raised {codes:?}"
+    );
+}

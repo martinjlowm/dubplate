@@ -71,7 +71,10 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
         .collect();
 
     let mut novelty_plot = LinePlot::new(
-        format!("Onset novelty and the {:.2} BPM grid", report.tempo.bpm),
+        format!(
+            "Onset novelty and the {} BPM grid",
+            report::format_bpm(report.tempo.bpm)
+        ),
         "time (s)",
         "novelty",
     )
@@ -156,7 +159,7 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
                 ))
                 .marker(Marker {
                     x: offset,
-                    label: Some(format!("reported {:.2}", report.tempo.bpm)),
+                    label: Some(format!("reported {}", report::format_bpm(report.tempo.bpm))),
                     colour: "#334155".into(),
                     dashed: false,
                 })

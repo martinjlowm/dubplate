@@ -59,10 +59,11 @@ footer {{ margin-top: 48px; font-size: 12px; color: #64748b; }}
 </style>
 </head>
 <body>
-<h1>{tempo:.2} BPM &middot; {camelot}</h1>
+<h1>{tempo} BPM &middot; {camelot}</h1>
 <p class="source">{path}</p>
 <div class="headline">
-  <div><span>tempo</span><strong>{tempo:.2}</strong></div>
+  <div><span>tempo</span><strong>{tempo}</strong></div>
+  <div><span>measured</span><strong>{measured:.2}</strong></div>
   <div><span>key</span><strong>{camelot}</strong></div>
   <div><span>notes</span><strong>{key}</strong></div>
   <div><span>grid fit</span><strong>{matched:.0}%</strong></div>
@@ -71,7 +72,8 @@ footer {{ margin-top: 48px; font-size: 12px; color: #64748b; }}
 "#,
         title = escape(&file_name(&report.source.path)),
         path = escape(&report.source.path),
-        tempo = report.tempo.bpm,
+        tempo = crate::format_bpm(report.tempo.bpm),
+        measured = report.tempo.bpm_measured,
         key = escape(&report.key.name),
         camelot = escape(&report.key.camelot),
         matched = report.tempo.grid.matched_fraction * 100.0,

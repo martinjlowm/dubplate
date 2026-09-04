@@ -48,6 +48,21 @@ pub struct TempoSettings {
     pub prior: Option<TempoPrior>,
     /// Metrical level the answer is reported at. See [`MetricalFloor`].
     pub floor: Option<MetricalFloor>,
+    /// Largest gap, in BPM, the reported tempo may be moved by to land on a
+    /// whole number.
+    ///
+    /// Produced music is written at an integer tempo, so a measurement of
+    /// 137.99 is a measurement of 138 and the decimals are this tool's error
+    /// rather than the track's. Closing that gap is worth doing because the
+    /// grid, the file name and both device databases all take the reported
+    /// number.
+    ///
+    /// The default is deliberately narrower than half a BPM. A track measured
+    /// 0.4 BPM off an integer is a track that was played rather than rendered,
+    /// and rounding it would write a grid that drifts a beat every two minutes.
+    /// Those keep their measurement and raise `non-integer-tempo`. At 0 nothing
+    /// is snapped, and `bpm_measured` carries the measurement either way.
+    pub integer_snap_bpm: f64,
 }
 
 /// The slowest metrical level the reported tempo is allowed to sit at.
@@ -98,6 +113,11 @@ impl Default for TempoSettings {
                 bpm: 90.0,
                 min_salience_ratio: 0.5,
             }),
+            // Wider than the 0.1 BPM candidate grid and than the 0.065 BPM the
+            // selftest misses a generated pulse train by at 200 BPM, so it
+            // closes this tool's error. Narrow enough that a track genuinely
+            // between two integers keeps its measurement.
+            integer_snap_bpm: 0.25,
         }
     }
 }
@@ -449,6 +469,19 @@ pub fn apply_floor(
         current = doubled;
     }
     (current, shift)
+}
+
+/// The whole number `bpm` should be reported as, when one sits within
+/// `tolerance` of it.
+///
+/// Returns `None` when nothing is close enough, which leaves the measurement as
+/// the answer and lets `non-integer-tempo` say why.
+pub fn snap_to_integer(bpm: f64, tolerance: f64) -> Option<f64> {
+    if !bpm.is_finite() || tolerance <= 0.0 {
+        return None;
+    }
+    let whole = bpm.round();
+    ((bpm - whole).abs() <= tolerance).then_some(whole)
 }
 
 /// The local maximum of the salience curve nearest `bpm`, refined between grid
