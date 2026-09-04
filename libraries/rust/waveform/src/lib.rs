@@ -11,6 +11,7 @@
 //! window that would resolve the split properly, and the eye is being served
 //! here rather than the analysis.
 
+use deku::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Columns per second in the detailed waveform.
@@ -44,6 +45,31 @@ pub struct Column {
     pub high: u8,
 }
 
+/// The two bytes a column is stored as, as the fields they are.
+///
+/// Written from the low bit of the first byte upwards: five bits of height,
+/// three of low band, then three each of mid and high in the second byte, and
+/// two that no format uses. `bit_order = "lsb"` is what says "from the low bit
+/// up"; the default fills from the high bit down and produces a file a player
+/// draws wrong rather than one it refuses.
+#[derive(DekuRead, DekuWrite)]
+#[deku(bit_order = "lsb")]
+struct PackedColumn {
+    #[deku(bits = 5)]
+    height: u8,
+    #[deku(bits = 3)]
+    low: u8,
+    #[deku(bits = 3)]
+    mid: u8,
+    #[deku(bits = 3)]
+    high: u8,
+    /// Unused by every format that reads these two bytes, and zero in what this
+    /// writes. Named rather than left as a gap, so a reader of the struct sees
+    /// the whole sixteen bits accounted for.
+    #[deku(bits = 2)]
+    spare: u8,
+}
+
 impl Column {
     /// Two bytes, which is what the JSON carries.
     ///
@@ -51,18 +77,27 @@ impl Column {
     /// numbers that is a megabyte of digits and commas per track; packed and
     /// base64-encoded it is 170 kB.
     fn pack(&self) -> [u8; 2] {
-        [
-            (self.height & 0x1f) | ((self.low & 0x07) << 5),
-            (self.mid & 0x07) | ((self.high & 0x07) << 3),
-        ]
+        let column = self.clamped();
+        let packed = PackedColumn {
+            height: column.height,
+            low: column.low,
+            mid: column.mid,
+            high: column.high,
+            spare: 0,
+        };
+        // Infallible because every field came through `clamped`.
+        let bytes = packed.to_bytes().expect("a clamped column fits its layout");
+        [bytes[0], bytes[1]]
     }
 
     fn unpack(bytes: [u8; 2]) -> Self {
+        let (_, packed) =
+            PackedColumn::from_bytes((&bytes, 0)).expect("a fixed sixteen-bit layout");
         Column {
-            height: bytes[0] & 0x1f,
-            low: (bytes[0] >> 5) & 0x07,
-            mid: bytes[1] & 0x07,
-            high: (bytes[1] >> 3) & 0x07,
+            height: packed.height,
+            low: packed.low,
+            mid: packed.mid,
+            high: packed.high,
         }
     }
 
@@ -72,6 +107,23 @@ impl Column {
     /// read white and a kick read dark in the old two-colour views.
     pub fn shade(&self) -> u8 {
         self.high.max(self.mid.saturating_sub(2))
+    }
+
+    /// The same column with every field inside the range its bit width allows.
+    ///
+    /// Every packed layout declares five bits of height and three of each band,
+    /// and a declared layout refuses a value too wide for its field rather than
+    /// truncating it, so a column of unknown provenance passes through here
+    /// before it is written. `render` already clamps, and the fields are public,
+    /// so this states the range once instead of at each of the four places a
+    /// column becomes bytes.
+    pub fn clamped(self) -> Self {
+        Column {
+            height: self.height.min(31),
+            low: self.low.min(7),
+            mid: self.mid.min(7),
+            high: self.high.min(7),
+        }
     }
 }
 
@@ -286,5 +338,52 @@ mod base64_bytes {
             }
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod packing {
+    use super::*;
+
+    /// The layout these two bytes had when they were written as shifts, kept as
+    /// the oracle for the derived one.
+    ///
+    /// Bit order is the one thing a derive macro can get wrong without failing:
+    /// filling from the high bit down produces two bytes of the right length
+    /// holding the wrong numbers, which a player draws rather than rejects. So
+    /// the proof is exhaustive over every value the four fields can hold.
+    fn shifted(column: &Column) -> [u8; 2] {
+        [
+            (column.height & 0x1f) | ((column.low & 0x07) << 5),
+            (column.mid & 0x07) | ((column.high & 0x07) << 3),
+        ]
+    }
+
+    #[test]
+    fn the_declared_layout_is_the_layout_the_shifts_wrote() {
+        for height in 0..32u8 {
+            for low in 0..8u8 {
+                for mid in 0..8u8 {
+                    for high in 0..8u8 {
+                        let column = Column {
+                            height,
+                            low,
+                            mid,
+                            high,
+                        };
+                        assert_eq!(
+                            column.pack(),
+                            shifted(&column),
+                            "height {height} low {low} mid {mid} high {high}"
+                        );
+                        assert_eq!(
+                            Column::unpack(column.pack()),
+                            column,
+                            "height {height} low {low} mid {mid} high {high} did not survive"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 serde.workspace = true
+deku.workspace = true
 
 [dev-dependencies]
 audio.workspace = true

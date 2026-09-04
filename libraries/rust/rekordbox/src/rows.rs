@@ -2,7 +2,10 @@
 //!
 //! Every layout here is little-endian and fixed-width except for the strings,
 //! which sit after the fixed part and are reached through an array of offsets
-//! relative to the start of the row.
+//! relative to the start of the row. Each fixed part is a struct with its field
+//! widths declared, so it can be read against the format analysis field by
+//! field; the offset array is computed rather than declared, because where a
+//! string lands depends on how long the ones before it were.
 //!
 //! Field names follow the community analysis at
 //! <https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/exports.html>.
@@ -11,11 +14,58 @@
 
 use crate::string;
 use collection::Format;
+use deku::prelude::*;
 
 /// Where `index_shift` sits in the rows that carry one. The page layer fills it
 /// in, because its value is derived from the row's position in its page.
 pub const INDEX_SHIFT_AT: usize = 2;
 
+/// Every layout here is fixed, so a write cannot fail for anything a caller
+/// could fix.
+fn bytes(layout: &impl DekuContainerWrite) -> Vec<u8> {
+    layout.to_bytes().expect("a fixed layout with no counts")
+}
+
+/// The fixed part of a track row, 0x5C bytes before the string offsets.
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct TrackRowFixed {
+    /// 0x24: the 0x04 bit is what makes the string offsets `u16` rather than
+    /// `u8`, which a track row needs because its strings run well past 255
+    /// bytes.
+    subtype: u16,
+    /// Filled in by the page layer once the row's position is known.
+    index_shift: u16,
+    bitmask: u32,
+    sample_rate: u32,
+    composer_id: u32,
+    file_size: u32,
+    unknown2: u32,
+    unknown3: u16,
+    unknown4: u16,
+    artwork_id: u32,
+    key_id: u32,
+    original_artist_id: u32,
+    label_id: u32,
+    remixer_id: u32,
+    bitrate_kbps: u32,
+    track_number: u32,
+    tempo_centi_bpm: u32,
+    genre_id: u32,
+    album_id: u32,
+    artist_id: u32,
+    id: u32,
+    disc_number: u16,
+    play_count: u16,
+    year: u16,
+    sample_depth: u16,
+    duration_seconds: u16,
+    unknown5: u16,
+    colour: u8,
+    rating: u8,
+    /// What a player reads to decide which decoder to use.
+    file_type: u16,
+}
 /// A track row.
 ///
 /// The fixed part is 0x5C bytes, then an array of twenty-one string offsets,
@@ -45,40 +95,41 @@ pub struct TrackRow {
 
 impl TrackRow {
     pub fn encode(&self) -> Vec<u8> {
-        let mut row = Vec::with_capacity(256);
-        // Subtype 0x24: the 0x04 bit is what makes the string offsets u16
-        // rather than u8, which a track row needs because its strings run well
-        // past 255 bytes.
-        row.extend_from_slice(&0x0024u16.to_le_bytes());
-        row.extend_from_slice(&0u16.to_le_bytes()); // index_shift, filled in later
-        row.extend_from_slice(&0x000c_0700u32.to_le_bytes()); // bitmask
-        row.extend_from_slice(&self.sample_rate.to_le_bytes());
-        row.extend_from_slice(&0u32.to_le_bytes()); // composer
-        row.extend_from_slice(&self.file_size.to_le_bytes());
-        row.extend_from_slice(&0u32.to_le_bytes()); // unknown2
-        row.extend_from_slice(&0u16.to_le_bytes()); // unknown3
-        row.extend_from_slice(&0u16.to_le_bytes()); // unknown4
-        row.extend_from_slice(&0u32.to_le_bytes()); // artwork
-        row.extend_from_slice(&self.key_id.to_le_bytes());
-        row.extend_from_slice(&0u32.to_le_bytes()); // original artist
-        row.extend_from_slice(&0u32.to_le_bytes()); // label
-        row.extend_from_slice(&0u32.to_le_bytes()); // remixer
-        row.extend_from_slice(&self.bitrate_kbps.to_le_bytes());
-        row.extend_from_slice(&0u32.to_le_bytes()); // track number
-        row.extend_from_slice(&self.tempo_centi_bpm.to_le_bytes());
-        row.extend_from_slice(&self.genre_id.to_le_bytes());
-        row.extend_from_slice(&self.album_id.to_le_bytes());
-        row.extend_from_slice(&self.artist_id.to_le_bytes());
-        row.extend_from_slice(&self.id.to_le_bytes());
-        row.extend_from_slice(&0u16.to_le_bytes()); // disc number
-        row.extend_from_slice(&0u16.to_le_bytes()); // play count
-        row.extend_from_slice(&0u16.to_le_bytes()); // year
-        row.extend_from_slice(&self.sample_depth.to_le_bytes());
-        row.extend_from_slice(&self.duration_seconds.to_le_bytes());
-        row.extend_from_slice(&0x0029u16.to_le_bytes()); // unknown5
-        row.push(0); // colour
-        row.push(0); // rating
-        row.extend_from_slice(&file_type(self.format).to_le_bytes());
+        let mut row = bytes(&TrackRowFixed {
+            subtype: 0x0024,
+            index_shift: 0,
+            bitmask: 0x000c_0700,
+            sample_rate: self.sample_rate,
+            composer_id: 0,
+            file_size: self.file_size,
+            unknown2: 0,
+            unknown3: 0,
+            unknown4: 0,
+            artwork_id: 0,
+            key_id: self.key_id,
+            original_artist_id: 0,
+            label_id: 0,
+            remixer_id: 0,
+            bitrate_kbps: self.bitrate_kbps,
+            track_number: 0,
+            tempo_centi_bpm: self.tempo_centi_bpm,
+            genre_id: self.genre_id,
+            album_id: self.album_id,
+            artist_id: self.artist_id,
+            id: self.id,
+            disc_number: 0,
+            play_count: 0,
+            year: 0,
+            sample_depth: self.sample_depth,
+            duration_seconds: self.duration_seconds,
+            unknown5: 0x0029,
+            colour: 0,
+            rating: 0,
+            file_type: file_type(self.format),
+        });
+        // A mistyped field width would still write a struct, just a shorter or
+        // longer one, and the strings after it are placed by offsets counted
+        // from here.
         debug_assert_eq!(
             row.len(),
             0x5C,
@@ -113,53 +164,107 @@ impl TrackRow {
     }
 }
 
+/// An id on its own, which is how a genre, label or key row starts.
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct RowId {
+    id: u32,
+}
+
 /// A row that is an id and a name, which covers genres, labels and keys.
 pub fn named(id: u32, name: &str, duplicate_id: bool) -> Vec<u8> {
-    let mut row = Vec::new();
-    row.extend_from_slice(&id.to_le_bytes());
+    let mut row = bytes(&RowId { id });
     // A key row carries its id twice. Nobody knows why, and rekordbox does it.
     if duplicate_id {
-        row.extend_from_slice(&id.to_le_bytes());
+        row.extend(bytes(&RowId { id }));
     }
     row.extend_from_slice(&string::encode(name));
     row
 }
 
+/// The fixed part of an artist row: eight bytes before the offset array.
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct ArtistRowFixed {
+    /// 0x60 keeps the offset a single byte, which is all the one string in this
+    /// row can need: it always starts ten bytes in.
+    subtype: u16,
+    index_shift: u16,
+    id: u32,
+}
+
 /// An artist row: eight fixed bytes, then a one-entry offset array.
 pub fn artist(id: u32, name: &str) -> Vec<u8> {
-    let mut row = Vec::new();
-    // Subtype 0x60 keeps the offset a single byte, which is all the one string
-    // in this row can need: it always starts ten bytes in.
-    row.extend_from_slice(&0x0060u16.to_le_bytes());
-    row.extend_from_slice(&0u16.to_le_bytes()); // index_shift, filled in later
-    row.extend_from_slice(&id.to_le_bytes());
+    let mut row = bytes(&ArtistRowFixed {
+        subtype: 0x0060,
+        index_shift: 0,
+        id,
+    });
     append_offset_array(&mut row, &[name], OffsetWidth::U8);
     row
 }
 
+/// The fixed part of an album row.
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct AlbumRowFixed {
+    subtype: u16,
+    index_shift: u16,
+    unknown1: u32,
+    artist_id: u32,
+    id: u32,
+    unknown2: u32,
+}
+
 /// An album row.
 pub fn album(id: u32, artist_id: u32, name: &str) -> Vec<u8> {
-    let mut row = Vec::new();
-    row.extend_from_slice(&0x0080u16.to_le_bytes()); // subtype
-    row.extend_from_slice(&0u16.to_le_bytes()); // index_shift, filled in later
-    row.extend_from_slice(&0u32.to_le_bytes()); // unknown
-    row.extend_from_slice(&artist_id.to_le_bytes());
-    row.extend_from_slice(&id.to_le_bytes());
-    row.extend_from_slice(&0u32.to_le_bytes()); // unknown
+    let mut row = bytes(&AlbumRowFixed {
+        subtype: 0x0080,
+        index_shift: 0,
+        unknown1: 0,
+        artist_id,
+        id,
+        unknown2: 0,
+    });
     append_offset_array(&mut row, &[name], OffsetWidth::U8);
     row
+}
+
+/// The fixed part of a colour row.
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct ColourRowFixed {
+    unknown1: u32,
+    unknown2: u8,
+    index: u8,
+    unknown3: u16,
 }
 
 /// A colour row. Written even though nothing here assigns colours, because a
 /// player shows the colour menu whether or not any track uses it.
 pub fn colour(index: u8, name: &str) -> Vec<u8> {
-    let mut row = Vec::new();
-    row.extend_from_slice(&0u32.to_le_bytes()); // unknown
-    row.push(0); // unknown
-    row.push(index);
-    row.extend_from_slice(&0u16.to_le_bytes()); // unknown
+    let mut row = bytes(&ColourRowFixed {
+        unknown1: 0,
+        unknown2: 0,
+        index,
+        unknown3: 0,
+    });
     row.extend_from_slice(&string::encode(name));
     row
+}
+
+/// The fixed part of a playlist tree node.
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct PlaylistNodeFixed {
+    parent_id: u32,
+    unknown: u32,
+    sort_order: u32,
+    id: u32,
+    /// Non-zero means a folder. The field name says so and the reference parser
+    /// reads it that way, against a stale comment in its own source claiming
+    /// the opposite.
+    is_folder: u32,
 }
 
 /// A node of the playlist tree: either a folder or a playlist.
@@ -170,28 +275,34 @@ pub fn playlist_node(
     is_folder: bool,
     name: &str,
 ) -> Vec<u8> {
-    let mut row = Vec::new();
-    row.extend_from_slice(&parent_id.to_le_bytes());
-    row.extend_from_slice(&0u32.to_le_bytes()); // unknown
-    row.extend_from_slice(&sort_order.to_le_bytes());
-    row.extend_from_slice(&id.to_le_bytes());
-    // Non-zero means a folder. The field name says so and the reference parser
-    // reads it that way, against a stale comment in its own source claiming the
-    // opposite.
-    row.extend_from_slice(&u32::from(is_folder).to_le_bytes());
+    let mut row = bytes(&PlaylistNodeFixed {
+        parent_id,
+        unknown: 0,
+        sort_order,
+        id,
+        is_folder: u32::from(is_folder),
+    });
     row.extend_from_slice(&string::encode(name));
     row
 }
 
 /// One track in one playlist, at one position.
-pub fn playlist_entry(entry_index: u32, track_id: u32, playlist_id: u32) -> Vec<u8> {
-    let mut row = Vec::new();
-    row.extend_from_slice(&entry_index.to_le_bytes());
-    row.extend_from_slice(&track_id.to_le_bytes());
-    row.extend_from_slice(&playlist_id.to_le_bytes());
-    row
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct PlaylistEntryRow {
+    entry_index: u32,
+    track_id: u32,
+    playlist_id: u32,
 }
 
+/// One track in one playlist, at one position.
+pub fn playlist_entry(entry_index: u32, track_id: u32, playlist_id: u32) -> Vec<u8> {
+    bytes(&PlaylistEntryRow {
+        entry_index,
+        track_id,
+        playlist_id,
+    })
+}
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum OffsetWidth {
     U8,

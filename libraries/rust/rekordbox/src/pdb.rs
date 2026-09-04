@@ -11,7 +11,14 @@
 //!
 //! Format reference: <https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/exports.html>
 
+use deku::prelude::*;
 use std::io::{self, Write};
+
+/// Every layout in this file is fixed, so a write cannot fail for anything a
+/// caller could fix.
+fn bytes(layout: &impl DekuContainerWrite) -> Vec<u8> {
+    layout.to_bytes().expect("a fixed layout with no counts")
+}
 
 /// Page size rekordbox writes and players expect. Stored in the header, but
 /// nothing is gained by varying it.
@@ -145,23 +152,26 @@ impl Database {
     /// Serialise the whole file.
     pub fn write(&self, out: &mut impl Write) -> io::Result<()> {
         let layout = self.layout()?;
-        let mut header = vec![0u8; PAGE_SIZE];
-        let mut cursor = Cursor::new(&mut header);
-
-        cursor.u32(0); // Always zero, perhaps a signature.
-        cursor.u32(PAGE_SIZE as u32);
-        cursor.u32(self.tables.len() as u32);
-        cursor.u32(layout.total_pages as u32); // First page past the end.
-        cursor.u32(0);
-        cursor.u32(1); // Sequence, incremented by rekordbox on every export.
-        cursor.u32(0); // Gap.
+        let mut front = bytes(&FileHeader {
+            magic: 0,
+            page_size: PAGE_SIZE as u32,
+            tables: self.tables.len() as u32,
+            next_unused_page: layout.total_pages as u32,
+            unknown: 0,
+            sequence: 1,
+            gap: 0,
+        });
         for table in &layout.tables {
-            cursor.u32(table.page_type as u32);
-            // Purpose unknown; rekordbox appears to point it past the table.
-            cursor.u32((table.last_page + 1) as u32);
-            cursor.u32(table.first_page as u32);
-            cursor.u32(table.last_page as u32);
+            front.extend(bytes(&TableEntry {
+                page_type: table.page_type as u32,
+                empty_candidate: (table.last_page + 1) as u32,
+                first_page: table.first_page as u32,
+                last_page: table.last_page as u32,
+            }));
         }
+
+        let mut header = vec![0u8; PAGE_SIZE];
+        header[..front.len()].copy_from_slice(&front);
         out.write_all(&header)?;
 
         for table in &layout.tables {
@@ -312,61 +322,207 @@ fn build_page(index: usize, page_type: PageType, next_page: usize, rows: &[RowBy
     }
 
     let group_bytes = group_count * ROW_GROUP_SIZE;
-    let mut cursor = Cursor::new(&mut page);
-    cursor.u32(0); // Page magic.
-    cursor.u32(index as u32);
-    cursor.u32(page_type as u32);
-    cursor.u32(next_page as u32);
-    cursor.u32(1); // Purpose unknown; small non-zero in the files we have read.
-    cursor.u32(0);
-    // Row counts packed into three bytes: thirteen bits of rows present, eleven
-    // of rows still valid. Nothing here ever deletes a row, so they are equal.
-    let packed = (rows.len() as u32 & 0x1fff) | ((rows.len() as u32 & 0x7ff) << 13);
-    cursor.u8((packed & 0xff) as u8);
-    cursor.u8(((packed >> 8) & 0xff) as u8);
-    cursor.u8(((packed >> 16) & 0xff) as u8);
-    // Page flags. 0x24 is what rekordbox writes on a data page holding rows;
-    // the 0x40 bit would mark it an index page, which this exporter never
-    // writes.
-    cursor.u8(0x24);
-    cursor.u16((HEAP_SIZE - used - group_bytes) as u16);
-    cursor.u16(used as u16);
-    // Data page header.
-    cursor.u16(1);
-    cursor.u16(rows.len() as u16);
-    cursor.u16(0);
-    cursor.u16(0);
+    let header = bytes(&PageHeader {
+        magic: 0,
+        index: index as u32,
+        page_type: page_type as u32,
+        next_page: next_page as u32,
+        unknown1: 1,
+        unknown2: 0,
+        rows_present: rows.len() as u16,
+        rows_valid: rows.len() as u16,
+        page_flags: 0x24,
+        free_size: (HEAP_SIZE - used - group_bytes) as u16,
+        used_size: used as u16,
+        data_unknown: 1,
+        data_rows: rows.len() as u16,
+        data_zero1: 0,
+        data_zero2: 0,
+    });
+    page[..header.len()].copy_from_slice(&header);
 
     page
 }
 
-/// A cursor that writes little-endian integers forward from the start of a
-/// buffer. Enough for a header; the rows do their own encoding.
-struct Cursor<'a> {
-    buffer: &'a mut [u8],
-    position: usize,
+/// The 0x20-byte page header and the 0x08-byte data header that follows it.
+///
+/// The two are one struct because they are always written together and the
+/// second has no meaning without the first.
+#[derive(DekuWrite)]
+#[deku(endian = "little", bit_order = "lsb")]
+struct PageHeader {
+    magic: u32,
+    index: u32,
+    page_type: u32,
+    next_page: u32,
+    /// Purpose unknown; a small non-zero number in every file read.
+    unknown1: u32,
+    unknown2: u32,
+    /// Thirteen bits of rows present, then eleven of rows still valid, packed
+    /// into three bytes. Nothing here ever deletes a row, so the two are equal.
+    #[deku(bits = 13)]
+    rows_present: u16,
+    #[deku(bits = 11)]
+    rows_valid: u16,
+    /// 0x24 is what rekordbox writes on a data page holding rows. The 0x40 bit
+    /// would mark it an index page, which this exporter never writes.
+    page_flags: u8,
+    free_size: u16,
+    used_size: u16,
+    /// The data header: a constant, the row count again, and four zero bytes.
+    data_unknown: u16,
+    data_rows: u16,
+    data_zero1: u16,
+    data_zero2: u16,
 }
 
-impl<'a> Cursor<'a> {
-    fn new(buffer: &'a mut [u8]) -> Self {
-        Cursor {
-            buffer,
-            position: 0,
+/// The file header: page size, table count, and where the pages end.
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct FileHeader {
+    /// Always zero. Perhaps a signature nobody has needed.
+    magic: u32,
+    page_size: u32,
+    tables: u32,
+    /// First page past the end of the file.
+    next_unused_page: u32,
+    unknown: u32,
+    /// Incremented by rekordbox on every export.
+    sequence: u32,
+    gap: u32,
+}
+
+/// One entry of the header's table list.
+#[derive(DekuWrite)]
+#[deku(endian = "little")]
+struct TableEntry {
+    page_type: u32,
+    /// Purpose unknown; rekordbox appears to point it past the table.
+    empty_candidate: u32,
+    first_page: u32,
+    last_page: u32,
+}
+
+#[cfg(test)]
+mod header_layout {
+    use super::*;
+
+    /// The page header as the cursor wrote it, kept as the oracle for the
+    /// declared one. The row counts are a thirteen-bit field and an eleven-bit
+    /// field sharing three bytes, and a derive macro filling those from the
+    /// wrong end writes a page a player misreads rather than rejects.
+    fn cursor_written(
+        index: usize,
+        page_type: PageType,
+        next_page: usize,
+        row_count: usize,
+        used: usize,
+        group_bytes: usize,
+    ) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&(index as u32).to_le_bytes());
+        out.extend_from_slice(&(page_type as u32).to_le_bytes());
+        out.extend_from_slice(&(next_page as u32).to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        let packed = (row_count as u32 & 0x1fff) | ((row_count as u32 & 0x7ff) << 13);
+        out.push((packed & 0xff) as u8);
+        out.push(((packed >> 8) & 0xff) as u8);
+        out.push(((packed >> 16) & 0xff) as u8);
+        out.push(0x24);
+        out.extend_from_slice(&((HEAP_SIZE - used - group_bytes) as u16).to_le_bytes());
+        out.extend_from_slice(&(used as u16).to_le_bytes());
+        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&(row_count as u16).to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out
+    }
+
+    /// The most rows a page can hold, which is what bounds the two packed row
+    /// counts.
+    ///
+    /// The smallest row this exporter writes is a twelve-byte playlist entry,
+    /// and every sixteen rows add a 36-byte group, so a full page of them is
+    /// under 300 rows. Both counts have at least eleven bits, so neither can
+    /// overflow its field.
+    const MOST_ROWS_A_PAGE_CAN_HOLD: usize = HEAP_SIZE / 12;
+
+    /// Checked at compile time, because it is what makes the eleven-bit field
+    /// below unreachable rather than merely unlikely.
+    const _: () = assert!(MOST_ROWS_A_PAGE_CAN_HOLD < 2048);
+
+    #[test]
+    fn a_row_count_too_large_for_its_field_is_refused_rather_than_truncated() {
+        // The cursor masked this to eleven bits and wrote a page claiming 0
+        // valid rows out of 2048. Unreachable either way, since a page holds a
+        // few hundred rows at most, but refusing beats writing a wrong number.
+        let over = PageHeader {
+            magic: 0,
+            index: 0,
+            page_type: PageType::Tracks as u32,
+            next_page: 1,
+            unknown1: 1,
+            unknown2: 0,
+            rows_present: 2048,
+            rows_valid: 2048,
+            page_flags: 0x24,
+            free_size: 0,
+            used_size: 0,
+            data_unknown: 1,
+            data_rows: 2048,
+            data_zero1: 0,
+            data_zero2: 0,
+        };
+        assert!(
+            over.to_bytes().is_err(),
+            "2048 valid rows does not fit eleven bits and has to be refused"
+        );
+    }
+
+    #[test]
+    fn the_declared_page_header_is_the_header_the_cursor_wrote() {
+        for row_count in [
+            0usize,
+            1,
+            15,
+            16,
+            17,
+            100,
+            255,
+            256,
+            MOST_ROWS_A_PAGE_CAN_HOLD,
+        ] {
+            let used = row_count * 4;
+            let group_bytes = row_count.div_ceil(ROWS_PER_GROUP) * ROW_GROUP_SIZE;
+            let declared = bytes(&PageHeader {
+                magic: 0,
+                index: 7,
+                page_type: PageType::Tracks as u32,
+                next_page: 8,
+                unknown1: 1,
+                unknown2: 0,
+                rows_present: row_count as u16,
+                rows_valid: row_count as u16,
+                page_flags: 0x24,
+                free_size: (HEAP_SIZE - used - group_bytes) as u16,
+                used_size: used as u16,
+                data_unknown: 1,
+                data_rows: row_count as u16,
+                data_zero1: 0,
+                data_zero2: 0,
+            });
+            assert_eq!(
+                declared,
+                cursor_written(7, PageType::Tracks, 8, row_count, used, group_bytes),
+                "page header for {row_count} rows"
+            );
+            assert_eq!(
+                declared.len(),
+                PAGE_HEADER_SIZE + DATA_HEADER_SIZE,
+                "a page header is 0x28 bytes with the data header"
+            );
         }
-    }
-
-    fn u8(&mut self, value: u8) {
-        self.buffer[self.position] = value;
-        self.position += 1;
-    }
-
-    fn u16(&mut self, value: u16) {
-        self.buffer[self.position..self.position + 2].copy_from_slice(&value.to_le_bytes());
-        self.position += 2;
-    }
-
-    fn u32(&mut self, value: u32) {
-        self.buffer[self.position..self.position + 4].copy_from_slice(&value.to_le_bytes());
-        self.position += 4;
     }
 }

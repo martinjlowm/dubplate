@@ -10,6 +10,7 @@ path = "src/lib.rs"
 [dependencies]
 collection.workspace = true
 waveform.workspace = true
+deku.workspace = true
 
 [dev-dependencies]
 # The oracle. Not a dependency: its row types cannot be constructed from outside

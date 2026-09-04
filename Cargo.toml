@@ -32,6 +32,11 @@ rustfft = "6"
 # between `fmt ` and `data`, which a naive 44-byte-header reader walks straight
 # into.
 hound = "3"
+# Bit-level layouts as types: the packed waveform columns are sub-byte fields,
+# one of which crosses a byte boundary, so the shifts they used to be written as
+# are what this replaces. The `bits` feature is what carries `bits` and
+# `bit_order`; without it deku is byte-only.
+deku = { version = "0.20", default-features = false, features = ["std", "bits"] }
 # PNG for the two dense pixel grids (spectrogram, chroma-gram). Everything else
 # is hand-written SVG, which needs no crate and keeps axis labels selectable.
 png = "0.17"

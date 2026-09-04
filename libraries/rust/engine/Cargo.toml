@@ -14,6 +14,7 @@ waveform.workspace = true
 # Bundled rather than linked against the host's: the schema below is fixed and
 # so should the engine reading it be.
 rusqlite = { version = "0.32", features = ["bundled"] }
+deku.workspace = true
 # Pure-Rust deflate, so the crate graph stays free of C libraries apart from
 # SQLite's own.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

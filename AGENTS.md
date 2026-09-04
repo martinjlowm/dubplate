@@ -86,7 +86,11 @@ edit to `Cargo.toml`.
     revision and not a version range.
 15. **Fields the format analysis calls unknown carry the constants real exports carry.**
     They are not padding. Zeroing one because nobody has explained it is how a stick becomes
-    unreadable on a player nobody here owns.
+    unreadable on a player nobody here owns. Every layout is a `deku` struct with its field
+    widths, endianness and bit order declared, so an unknown field is a named field with a
+    comment rather than a number in a byte stream. A new layout is declared the same way; the
+    offset arrays and the page packing stay hand-written, because where a row lands depends on
+    what came before it and a derive macro cannot say that.
 16. **`Track::device_path` is the only place a file's location on the device is decided.**
     The database, the analysis files and the image builder all read it. Two of them computing
     a path separately is two of them disagreeing.
@@ -175,6 +179,10 @@ No em dashes. Sentence case in headings. Name the actor rather than writing in t
   that unquoted hands the shell an ampersand and a subshell to parse.
 - **devenv** provides the shell: the toolchain pinned in `rust-toolchain.toml`, `just`,
   `treefmt`, `crate2nix`. `direnv allow`, or `devenv shell`.
+- **deku** carries every device layout: `#[deku(endian, bits, bit_order)]` on a struct instead
+  of `extend_from_slice(&x.to_be_bytes())`. It refuses a value too wide for its field rather
+  than truncating it, which is why the packed waveform columns pass through `Column::clamped`
+  first. It costs about 110 ms per track in the export step, which the volume here can afford.
 - **crate2nix** resolves the crate graph ahead of time into `Cargo.nix`, which
   `devenv build outputs.dubplate` reads. Nothing fetches during evaluation.
 - **outputs.library** builds every track in `archives/` and `audio/` into `wav/`, `flac/` and
