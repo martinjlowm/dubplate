@@ -1,0 +1,7 @@
+# The toolchain both the dev shell and the Nix build use. Pinned rather than
+# tracking stable: crate2nix builds every crate in the graph against this
+# compiler, and a channel bump is a rebuild of all of them, so it is a decision
+# with a diff rather than a Tuesday.
+[toolchain]
+channel = "1.95"
+components = ["rust-src", "rustfmt", "clippy"]

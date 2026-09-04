@@ -1,0 +1,43 @@
+[workspace]
+# resolver 3 is MSRV-aware: with rust-version set below, cargo picks dependency
+# versions the pinned toolchain can still compile, so a fresh `cargo update` in
+# CI cannot pull in a crate that needs a newer rustc than the dev shell ships.
+resolver = "3"
+# Globs, so adding a crate does not mean editing this file. Role decides the
+# directory: reusable analysis stages in libraries/rust/, the CLI in tools/rust/.
+members = ["libraries/rust/*", "tools/rust/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "UNLICENSED"
+rust-version = "1.91"
+
+[workspace.dependencies]
+audio = { path = "libraries/rust/audio" }
+diagnostics = { path = "libraries/rust/diagnostics" }
+spectral = { path = "libraries/rust/spectral" }
+tempo = { path = "libraries/rust/tempo" }
+key-detect = { path = "libraries/rust/key-detect" }
+report = { path = "libraries/rust/report" }
+
+# rustfft is the only numeric dependency: a mixed-radix FFT that accepts any
+# window length, so a window size is a tuning knob rather than a rebuild.
+rustfft = "6"
+# hound decodes the WAV container. The sample tracks carry a LIST/INFO chunk
+# between `fmt ` and `data`, which a naive 44-byte-header reader walks straight
+# into.
+hound = "3"
+# PNG for the two dense pixel grids (spectrogram, chroma-gram). Everything else
+# is hand-written SVG, which needs no crate and keeps axis labels selectable.
+png = "0.17"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+
+[profile.release]
+# A ten-minute track is ~26 million samples and every stage is a hot loop over
+# them; the debug profile takes minutes where this takes seconds.
+lto = true
+codegen-units = 1

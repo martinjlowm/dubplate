@@ -1,0 +1,13 @@
+[package]
+name = "key-detect"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "key_detect"
+path = "src/lib.rs"
+
+[dependencies]
+diagnostics.workspace = true
+serde.workspace = true

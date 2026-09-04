@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json
+inputs:
+  # The release channel, not devenv-nixpkgs/rolling: the crate graph is built
+  # against what this pin ships, and a rolling pin turns an unrelated commit
+  # into a full rebuild of every dependency.
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixos-26.05
+  # Pinned so `just sync-cargo-nix` regenerates Cargo.nix with a known version,
+  # instead of `nix run nixpkgs#crate2nix` resolving whatever the caller's
+  # registry points at.
+  crate2nix:
+    url: github:nix-community/crate2nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  # Supplies rust-bin, which reads rust-toolchain.toml. nixpkgs alone has no
+  # way to pin a compiler version from a file.
+  rust-overlay:
+    url: github:oxalica/rust-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  treefmt-nix:
+    url: github:numtide/treefmt-nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs

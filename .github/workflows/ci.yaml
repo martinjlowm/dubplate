@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, lint, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+      - name: Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Install devenv
+        run: nix profile install nixpkgs#devenv
+      # One command, the same one a contributor runs: formatting, clippy, the
+      # tests, and the check that Cargo.nix still matches the manifests.
+      - name: just check
+        run: devenv shell -- just check
+
+  build:
+    name: Nix build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+      - name: Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Install devenv
+        run: nix profile install nixpkgs#devenv
+      # Builds every dependency from the committed crate graph rather than from
+      # a cargo cache, which is what makes the result reproducible off this
+      # machine.
+      - name: devenv build
+        run: devenv build outputs.music-analyze

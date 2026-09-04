@@ -1,0 +1,147 @@
+# Agent instructions: music-analyze
+
+A Rust CLI that measures tempo and key in a WAV file and writes out the evidence: the novelty
+curve, the tempo salience of every competing candidate, the beat grid over the onsets, a
+spectrogram, and a list of the reasons the answer might be wrong.
+
+The reason it exists is troubleshooting. Other tools print a number; when that number is wrong
+there is nothing to inspect. Any change that makes this one more accurate and less inspectable
+is the wrong trade.
+
+## 1. Where things are
+
+- `libraries/rust/audio` decoding, mono downmix, excerpting, and the synthesised signals the
+  tests measure against.
+- `libraries/rust/spectral` the STFT and its two reductions, log-spaced band energies and
+  chroma, plus the tuning estimator.
+- `libraries/rust/tempo` novelty curves, tempo salience, beat grid, and the rules in
+  `diagnostics.rs` that name a doubtful answer.
+- `libraries/rust/key-detect` chroma to key by profile correlation, with Camelot notation.
+- `libraries/rust/diagnostics` the finding type every stage reports doubts in.
+- `libraries/rust/report` the JSON report, the SVG plots, the PNG spectrogram, the HTML page.
+- `tools/rust/music-analyze` the CLI. `pipeline.rs` runs the pass, `figures.rs` draws,
+  `summary.rs` prints, `rename.rs` builds the `<BPM>_<KEY>_<rest>` name.
+- `nix/library.nix` the archive pipeline: one derivation per track, three format outputs.
+
+A crate's home follows from its role. Reusable stages go in `libraries/rust/`, things you run
+go in `tools/rust/`. Both are globs in the workspace manifest, so adding a crate needs no
+edit to `Cargo.toml`.
+
+## 2. Non-negotiable constraints (load-bearing, do not simplify away)
+
+1. **No stage silently corrects another.** The metrical floor is the only rule that changes
+   the reported number, and it emits `metrical-floor-applied` with both saliences every time
+   it fires. A detector that quietly fixes itself is what this tool exists to troubleshoot.
+2. **Diagnostics never change the answer.** They read what the stage already produced. A rule
+   that adjusts a result is not a diagnostic.
+3. **No tempo prior by default.** A prior improves the average case and is exactly how a
+   174 BPM track gets reported as 87. `--tempo-prior` switches it on, and the report then
+   carries the ranking it would have produced without one.
+4. **The comb penalty defaults to 0.** Subtracting the autocorrelation between comb teeth
+   rejects subharmonics, and it fires just as hard on the true tempo of anything with offbeat
+   movement. At full weight it reports 106.64 BPM for a 160 BPM hardstyle track. Do not
+   restore a non-zero default without measuring the whole working set again.
+5. **`report.json` is the contract.** Every terminal line, every table and every plot is
+   derived from it. Nothing is computed for display only.
+6. **Chroma folds spectral peaks, not every bin.** An FFT bin is a fixed width in hertz and a
+   semitone is not, so mapping every bin bakes the transform geometry into the result. The
+   version that did reported F major for sixteen of seventeen tracks.
+7. **One transform pass, nothing kept whole.** A ten-minute track is about 52 000 frames of
+   1025 bins. `Stft::for_each_frame` hands each spectrum to a callback and reuses the buffer.
+   Only the tuning estimate gets a second, strided pass, because the chroma mapping is built
+   around it.
+8. **The moving average subtracted from the flux must stay wider than a beat period.** At
+   0.5 s and 60 BPM it removes the pulse being measured. If a default changes, check the slow
+   end of the tempo range.
+9. **Tests measure against synthesised signals** from `audio::synth`, never against a track. A
+   fixture whose true tempo is an assumption fails for two reasons and cannot separate them.
+10. **Audio never enters the repository.** `.gitignore` covers `*.wav` and the rest. The
+    working set sits untracked in the repo root.
+11. **`Cargo.nix` is generated.** Fix the manifest and regenerate with `just sync-cargo-nix`.
+    The pre-commit hook does it for you; CI fails when the graph and the manifests disagree.
+12. **Renaming never touches the source.** `rename` writes links or copies under a directory
+    you name, and the default mode changes nothing at all. The Nix pipeline is the same rule
+    at scale: the archives are inputs, the named collection is an output.
+13. **The tool reads audio and nothing else.** No network, no metadata tags, no online
+    lookup. Every number is measured from the samples.
+
+## 3. What a change to the algorithm has to show
+
+Any edit to onset detection, tempo salience or key correlation is measured before it is
+committed:
+
+```sh
+just selftest --bpm 100    # and 128, 145, 174, 200
+for f in *.wav; do just analyze "$f" --no-figures -o /tmp/sweep; done
+```
+
+The selftest error stays under 0.5% at every tempo. In the sweep, look at whether answers
+still land near whole numbers, since produced electronic music is written at integer tempi and
+a drift away from them is the signal that something regressed. Say in the pull request what
+moved.
+
+## 4. Out of scope
+
+Formats other than WAV in the Rust code, tag writing, playlists, stem separation, and anything
+that plays audio. The archive pipeline handles other formats by decoding them with `flac` and
+`lame` before the analyser sees them, which keeps one decoder per format and each of them the
+reference implementation. If in-process decoding is ever wanted, it belongs behind the same
+`Audio` type in `libraries/rust/audio` and nothing downstream should notice.
+
+## 5. Code conventions
+
+### Comments
+
+Prefer a descriptive name to a comment. Keep comments that explain a why, a guard, or a
+non-obvious consequence, and the ones that record a measurement, such as why the comb penalty
+is off. Drop comments that restate the code. The comments naming failure modes in
+`tempo/src/` and `spectral/src/chroma.rs` are load-bearing.
+
+### Tests
+
+As few as possible without losing coverage. One integration test per crate boundary, plus the
+CLI test that runs the binary. Assertions carry the measured value in the failure message, so
+a failure reads as a number rather than as `assertion failed`.
+
+### Rust
+
+- `snake_case` for variables and functions, `PascalCase` for types.
+- Files and directories are `kebab-case`.
+- No `unsafe`, no panics on user input. The CLI returns `anyhow::Result` and the libraries
+  return typed errors.
+- Clippy with `-D warnings` is a gate, not advice.
+
+### Prose
+
+Documentation follows four modes and keeps them apart. A tutorial teaches one path that works,
+a how-to gets a competent reader to a goal, a reference describes the machinery, and an
+explanation says why the code is shaped this way. `README.md` carries all four in that order,
+`docs/01` explains, `docs/02` is a how-to, `docs/03` is reference. A reference entry is read
+out of the code before it is written down.
+
+No em dashes. Sentence case in headings. Name the actor rather than writing in the passive.
+
+## 6. Tooling
+
+- **just** runs everything: `just check` is the PR gate, `just analyze` and `just selftest`
+  are the two things you run while working.
+- **devenv** provides the shell: the toolchain pinned in `rust-toolchain.toml`, `just`,
+  `treefmt`, `crate2nix`. `direnv allow`, or `devenv shell`.
+- **crate2nix** resolves the crate graph ahead of time into `Cargo.nix`, which
+  `devenv build outputs.music-analyze` reads. Nothing fetches during evaluation.
+- **outputs.library** builds every track in `archives/` and `audio/` into `wav/`, `flac/` and
+  `mp3/`. It lists archive contents through import from derivation, so evaluation builds the
+  manifest before it knows what the tracks are.
+- **treefmt** formats Rust and Nix from one definition in `treefmt.nix`, used by the shell,
+  the git hook and CI.
+
+## 7. Git and pull requests
+
+Commit messages and pull request titles follow `<type>(<scope>): <description>`.
+
+- `<type>` is one of `feat`, `fix`, `chore`, `docs`.
+- `<scope>` is the crate or area: `tempo`, `spectral`, `key-detect`, `report`, `cli`, `docs`,
+  `ci`.
+- Multiple scopes read `feat(tempo,cli): ...`; repository-wide changes read `chore(*): ...`.
+
+A pull request that changes an algorithm carries the sweep numbers from section 3.

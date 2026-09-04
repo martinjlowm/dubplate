@@ -1,0 +1,20 @@
+[package]
+name = "music-analyze"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "music-analyze"
+path = "src/main.rs"
+
+[dependencies]
+audio.workspace = true
+diagnostics.workspace = true
+key-detect.workspace = true
+report.workspace = true
+spectral.workspace = true
+tempo.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true

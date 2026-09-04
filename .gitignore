@@ -1,0 +1,32 @@
+# Nix / devenv / direnv
+.devenv/
+.direnv/
+.devenv.flake.nix
+devenv.local.nix
+# devenv git-hooks writes this as a symlink into the Nix store
+.pre-commit-config.yaml
+result
+result-*
+
+# Rust (single workspace target/ at the repo root)
+/target/
+
+# Audio under analysis, and whatever a run writes about it. Tracks are tens of
+# megabytes each and licensed to whoever downloaded them; test fixtures are
+# synthesized in-process instead (libraries/rust/audio/src/synth.rs).
+*.wav
+*.flac
+*.aiff
+*.mp3
+*.zip
+/analysis/
+
+# OS
+.DS_Store
+
+# The tracks under analysis. A directory or a symlink to one; see
+# outputs.library in devenv.nix.
+/audio
+
+# Zip downloads feeding outputs.library.
+/archives
