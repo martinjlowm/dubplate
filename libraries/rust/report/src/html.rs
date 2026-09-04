@@ -59,12 +59,12 @@ footer {{ margin-top: 48px; font-size: 12px; color: #64748b; }}
 </style>
 </head>
 <body>
-<h1>{tempo:.2} BPM &middot; {key} ({camelot})</h1>
+<h1>{tempo:.2} BPM &middot; {camelot}</h1>
 <p class="source">{path}</p>
 <div class="headline">
   <div><span>tempo</span><strong>{tempo:.2}</strong></div>
-  <div><span>key</span><strong>{key}</strong></div>
-  <div><span>camelot</span><strong>{camelot}</strong></div>
+  <div><span>key</span><strong>{camelot}</strong></div>
+  <div><span>notes</span><strong>{key}</strong></div>
   <div><span>grid fit</span><strong>{matched:.0}%</strong></div>
   <div><span>analysed</span><strong>{analysed}</strong></div>
 </div>
@@ -150,11 +150,11 @@ footer {{ margin-top: 48px; font-size: 12px; color: #64748b; }}
     let _ = write!(html, "<h2>Key ranking</h2>");
     table(
         &mut html,
-        &["key", "Camelot", "correlation"],
+        &["key", "notes", "correlation"],
         report.key.ranked.iter().take(6).map(|k| {
             vec![
-                k.name.clone(),
                 k.camelot.clone(),
+                k.name.clone(),
                 format!("{:.3}", k.correlation),
             ]
         }),

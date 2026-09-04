@@ -14,9 +14,8 @@ pub fn print(report: &AnalysisReport, out: &Path, no_figures: bool, to: &mut dyn
     let analysed = report.source.analysed_seconds.round() as i64;
     let _ = writeln!(
         to,
-        "{:.2} BPM   {} ({})   {}:{:02} analysed",
+        "{:.2} BPM   {}   {}:{:02} analysed",
         tempo.bpm,
-        report.key.name,
         report.key.camelot,
         analysed / 60,
         analysed % 60

@@ -174,8 +174,8 @@ pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f6
         out.join("chroma.svg"),
         BarChart::new(
             format!(
-                "Pitch-class energy ({:+.0} cents from A = 440 Hz)",
-                report.key.tuning_cents
+                "Pitch-class energy for {} ({:+.0} cents from A = 440 Hz)",
+                report.key.camelot, report.key.tuning_cents
             ),
             "share of energy",
             PITCH_CLASSES

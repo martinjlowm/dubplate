@@ -66,9 +66,10 @@ pub fn build(collection: &Collection, options: &Options) -> Database {
     let (artists, artist_of_track) = collection.index_by(|track| Some(track.artist.as_str()));
     let (genres, genre_of_track) = collection.index_by(|track| track.genre.as_deref());
     let (albums, album_of_track) = collection.index_by(|track| track.album.as_deref());
-    // Keys are stored by name, so two tracks in F minor share one row and a
-    // player can offer "same key" browsing.
-    let (keys, key_of_track) = collection.index_by(|track| Some(track.key_name.as_str()));
+    // Keys are stored in Camelot notation, which is what a player then shows and
+    // sorts by, and matches the file names. Two tracks in the same key share one
+    // row, which is what makes "same key" browsing work.
+    let (keys, key_of_track) = collection.index_by(|track| Some(track.key_camelot.as_str()));
 
     for (index, name) in artists.iter().enumerate() {
         database

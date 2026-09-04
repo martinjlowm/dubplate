@@ -31,7 +31,9 @@ fn flat_waveform(columns_per_second: f64, count: usize) -> Waveform {
     Waveform::from_columns(columns_per_second, &columns)
 }
 
-fn track(name: &str, bpm: f64, key: &str) -> Track_ {
+/// A track fixture. `key` is Camelot and `notes` the same key written out; the
+/// two have to agree, since the database stores one and the report the other.
+fn track(name: &str, bpm: f64, key: &str, notes: &str) -> Track_ {
     let beats = (0..64)
         .map(|index| Beat {
             time_seconds: index as f64 * 60.0 / bpm,
@@ -49,8 +51,8 @@ fn track(name: &str, bpm: f64, key: &str) -> Track_ {
         genre: Some("Trance".to_string()),
         comment: String::new(),
         bpm,
-        key_name: key.to_string(),
-        key_camelot: "8A".to_string(),
+        key_name: notes.to_string(),
+        key_camelot: key.to_string(),
         duration_seconds: 431.0,
         sample_rate: 44100,
         bit_depth: 16,
@@ -71,11 +73,11 @@ fn track(name: &str, bpm: f64, key: &str) -> Track_ {
 
 fn collection() -> Collection {
     let tracks = vec![
-        track("First Track (Extended Mix)", 138.0, "F# minor"),
-        track("Second Track", 174.5, "A minor"),
+        track("First Track (Extended Mix)", 138.0, "11A", "F# minor"),
+        track("Second Track", 174.5, "8A", "A minor"),
         // Non-ASCII, because those strings take the other encoding and the
         // alignment rule that goes with it.
-        track("Tredje Spår (Förlängd)", 128.0, "F# minor"),
+        track("Tredje Spår (Förlängd)", 128.0, "11A", "F# minor"),
     ];
     let playlists = vec![Playlist {
         name: "All tracks".to_string(),
@@ -199,10 +201,11 @@ fn artists_genres_and_keys_are_shared_between_tracks() {
     assert_eq!(genres.len(), 1);
     field(&genres[0], "Trance");
 
-    // Two distinct key names across the three tracks.
+    // Two distinct keys across the three tracks, stored the way a player shows
+    // them.
     let keys: Vec<Key> = read(&bytes);
     assert_eq!(keys.len(), 2);
-    field(&keys[0], "F# minor");
+    field(&keys[0], "11A");
 
     let colours: Vec<Color> = read(&bytes);
     assert_eq!(colours.len(), 8);
@@ -243,6 +246,7 @@ fn a_collection_larger_than_one_page_still_reads_back() {
             track(
                 &format!("Track number {index}"),
                 120.0 + index as f64,
+                "8B",
                 "C major",
             )
         })

@@ -76,8 +76,10 @@ impl Key {
 #[derive(Clone, Debug, Serialize)]
 pub struct KeyScore {
     pub key: Key,
-    pub name: String,
+    /// Camelot notation, which is how every reader of this report mixes.
     pub camelot: String,
+    /// The same key written as notes, for whoever wants it.
+    pub name: String,
     /// Pearson correlation between the chroma vector and the rotated profile.
     pub correlation: f64,
 }
@@ -90,8 +92,10 @@ pub struct KeyAnalysis {
     /// Deviation from A = 440 Hz the chroma mapping compensated for.
     pub tuning_cents: f64,
     pub key: Key,
-    pub name: String,
+    /// Camelot notation, which is what the terminal, the page and the device
+    /// databases all show.
     pub camelot: String,
+    pub name: String,
     /// Margin between the winner and the runner-up, as a fraction of the
     /// winner's correlation. Under about 0.05 the two are indistinguishable.
     pub margin: f64,
@@ -115,8 +119,8 @@ pub fn analyze(chroma: [f64; 12], tuning_cents: f64, profile: Profile) -> KeyAna
                 let key = Key { tonic, mode };
                 KeyScore {
                     key,
-                    name: key.name(),
                     camelot: key.camelot(),
+                    name: key.name(),
                     correlation: correlation(&normalised, &profile.rotated(mode, tonic)),
                 }
             })
@@ -137,8 +141,8 @@ pub fn analyze(chroma: [f64; 12], tuning_cents: f64, profile: Profile) -> KeyAna
         chroma: normalised,
         tuning_cents,
         key: best.key,
-        name: best.name.clone(),
         camelot: best.camelot.clone(),
+        name: best.name.clone(),
         margin,
         ranked,
         diagnostics: Vec::new(),
@@ -160,9 +164,9 @@ fn inspect(analysis: &KeyAnalysis, runner_up: &KeyScore) -> Vec<Diagnostic> {
             },
             format!(
                 "{} scores within {:.1}% of {}{}",
-                runner_up.name,
+                runner_up.camelot,
                 analysis.margin * 100.0,
-                analysis.name,
+                analysis.camelot,
                 if relative {
                     ": the two share every note, so the ranking is decided by which degree the track dwells on"
                 } else {
