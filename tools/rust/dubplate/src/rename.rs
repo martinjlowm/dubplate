@@ -9,56 +9,22 @@
 //! Nothing here renames the original. A run produces links or copies under a
 //! directory you name, and the source tree is left alone.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
 /// The name a file measured at `bpm` in `camelot` should carry.
 ///
-/// `camelot` is the short form the report prints, such as `8A`.
+/// `camelot` is the short form the report prints, such as `8A`. The rule lives
+/// in `collection::naming` because a browser writes these names into a FAT32
+/// image and both databases store the result; two spellings of the prefix would
+/// be a stick whose listing does not sort.
 pub fn target_name(original: &Path, bpm: f64, camelot: &str) -> Result<String> {
-    if !bpm.is_finite() || !(1.0..1000.0).contains(&bpm) {
-        bail!("cannot name a file after a tempo of {bpm}");
-    }
     let file_name = original
         .file_name()
         .and_then(|n| n.to_str())
         .context("the path has no file name")?;
-
-    let (stem, extension) = match file_name.rsplit_once('.') {
-        Some((stem, extension)) => (stem, format!(".{extension}")),
-        None => (file_name, String::new()),
-    };
-
-    let (number, letter) = camelot.split_at(camelot.len().saturating_sub(1));
-    let number: u32 = number
-        .parse()
-        .context("the Camelot number is not a number")?;
-
-    Ok(format!(
-        "{:03}_{:02}{}_{}{}",
-        bpm.round() as u32,
-        number,
-        letter,
-        strip_existing_prefix(stem),
-        extension
-    ))
-}
-
-/// Drop a `123_08A_` prefix this tool wrote earlier.
-///
-/// Renaming an already renamed file is the common case: a second run after a
-/// flag change should replace the numbers rather than stack another pair in
-/// front of them.
-fn strip_existing_prefix(stem: &str) -> &str {
-    let mut parts = stem.splitn(3, '_');
-    let (Some(bpm), Some(key), Some(rest)) = (parts.next(), parts.next(), parts.next()) else {
-        return stem;
-    };
-    let bpm_shaped = bpm.len() == 3 && bpm.bytes().all(|b| b.is_ascii_digit());
-    let key_shaped = key.len() == 3
-        && key.as_bytes()[..2].iter().all(u8::is_ascii_digit)
-        && matches!(key.as_bytes()[2], b'A' | b'B');
-    if bpm_shaped && key_shaped { rest } else { stem }
+    collection::naming::target_name(file_name, bpm, camelot)
+        .with_context(|| format!("cannot name a file after {bpm} BPM in {camelot}"))
 }
 
 /// Every WAV under `path`, or `path` itself when it is a file.

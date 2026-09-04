@@ -5,6 +5,7 @@
 //! Nothing here knows about either device, and the exporters know nothing about
 //! how the facts were measured.
 
+pub mod naming;
 pub mod report;
 pub mod sink;
 
