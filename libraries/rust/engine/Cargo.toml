@@ -13,7 +13,12 @@ waveform.workspace = true
 # The database is SQLite, so this is not a format that can be hand-written.
 # Bundled rather than linked against the host's: the schema below is fixed and
 # so should the engine reading it be.
-rusqlite = { version = "0.32", features = ["bundled"] }
+#
+# `serialize` is what returns the database as bytes, which is the only way to
+# build one where there is no filesystem. 0.40 or newer is also what carries
+# `ffi-sqlite-wasm-rs`, on by default, which swaps the bundled C build for one
+# that compiles against a wasm shim when the target is wasm32-unknown-unknown.
+rusqlite = { version = "0.40", features = ["bundled", "serialize"] }
 deku.workspace = true
 # Pure-Rust deflate, so the crate graph stays free of C libraries apart from
 # SQLite's own.

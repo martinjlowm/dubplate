@@ -244,3 +244,57 @@ fn tempdir(name: &str) -> PathBuf {
     std::fs::create_dir_all(&path).unwrap();
     path
 }
+
+#[test]
+fn the_database_can_be_built_without_a_filesystem() {
+    // What a browser calls. `write_device` is this plus a write, so the bytes
+    // here are the bytes on a stick.
+    let collection = Collection {
+        tracks: vec![track("Only", 126.0, "5A")],
+        playlists: vec![Playlist {
+            name: "All tracks".to_string(),
+            tracks: vec![0],
+        }],
+    };
+    let bytes = engine::build(
+        &collection,
+        &engine::Options {
+            date: "2026-09-04".to_string(),
+        },
+    )
+    .expect("building the database in memory");
+
+    assert_eq!(
+        &bytes[..15],
+        b"SQLite format 3",
+        "the bytes have to be a database, not a serialisation of our own"
+    );
+
+    // And SQLite has to agree, including the triggers a player checks for and
+    // the analysis the view's INSTEAD OF trigger moved into the track row.
+    let path = tempdir("engine-in-memory").join("m.db");
+    std::fs::write(&path, &bytes).unwrap();
+    let connection = Connection::open(&path).expect("reopening what build wrote");
+    let triggers: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type = 'trigger'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(triggers, 24, "the schema is what a player looks for");
+    let (bpm, beat_data): (i64, Vec<u8>) = connection
+        .query_row("SELECT bpm, beatData FROM Track WHERE id = 1", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(bpm, 126);
+    assert!(
+        !beat_data.is_empty(),
+        "the beat grid reached the row through the PerformanceData trigger"
+    );
+    let integrity: String = connection
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(integrity, "ok");
+}

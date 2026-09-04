@@ -48,9 +48,20 @@ pub fn write_device(
         std::fs::create_dir_all(parent)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
     }
-    let _ = std::fs::remove_file(&path);
+    let database = build(collection, options)?;
+    std::fs::write(&path, database)
+        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
+}
 
-    let mut connection = Connection::open(&path)?;
+/// The database as bytes, built in memory.
+///
+/// This is what a browser can use: there is nowhere to put a path there, and
+/// SQLite is the same SQLite either way, so the schema, the inserts and the
+/// twenty-four triggers that do work on insert stay here rather than being
+/// transcribed into whatever the caller is written in. `write_device` is this
+/// plus a write.
+pub fn build(collection: &Collection, options: &Options) -> Result<Vec<u8>, rusqlite::Error> {
+    let mut connection = Connection::open_in_memory()?;
     schema::create(&connection)?;
 
     // Row zero of AlbumArt is "no artwork", and every track points at it. The
@@ -104,7 +115,12 @@ pub fn write_device(
             )?;
         }
     }
-    transaction.commit()
+    transaction.commit()?;
+
+    // `serialize` hands back the pages SQLite would have written to a file, so
+    // what a player reads is what the database engine produced rather than
+    // anything assembled here.
+    Ok(connection.serialize("main")?.to_vec())
 }
 
 fn insert_track(

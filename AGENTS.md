@@ -101,17 +101,25 @@ edit to `Cargo.toml`.
 17. **The Engine schema is Denon's and is not tidied.** Column names, the misspelt
     `currentPlayedIndiciator` and `isPerfomanceDataOfPackedTrackChanged` among them, are what a
     player looks for. The triggers do work on insert, so rows are written with the columns
-    they fill left alone.
+    they fill left alone. `PerformanceData` is a view, and the analysis blobs reach the track
+    row through its `INSTEAD OF` trigger, which is why this file is built by SQLite rather than
+    assembled: `engine::build` opens an in-memory database, runs the DDL and the inserts, and
+    returns `sqlite3_serialize` of the result, so the bytes on the stick are the pages SQLite
+    wrote. `write_device` is that plus a write.
 18. **Dates come from `SOURCE_DATE_EPOCH` when it is set.** Otherwise the same library
     exports to two different images, which makes every Nix rebuild copy gigabytes for a field
     nobody can hear.
-19. **The analysis touches no file, clock or environment variable.** `libraries/rust/pipeline`
-    takes samples and returns a report and named artefacts; opening the file, writing the
-    artefacts and deciding what today is belong to the CLI. That is what lets the same code
-    run in a browser, where `std::fs` compiles and then panics, and `just check-wasm` is the
-    gate that catches a regression: `cargo check --target wasm32-unknown-unknown` over the
-    pipeline and the rekordbox exporter. A `SystemTime::now()` added to a library reads fine
-    on a laptop and takes the wasm build with it.
+19. **The analysis and both exporters touch no file, clock or environment variable.**
+    `libraries/rust/pipeline` takes samples and returns a report and named artefacts, and both
+    exporters return bytes; opening the file, writing what came back and deciding what today
+    is belong to the CLI. That is what lets the same code run in a browser, where `std::fs`
+    compiles and then panics, and `just check-wasm` is the gate that catches a regression:
+    `cargo check --target wasm32-unknown-unknown` over the pipeline and both exporters. A
+    `SystemTime::now()` added to a library reads fine on a laptop and takes the wasm build with
+    it. Two things that build needs, both recorded where they are used: rusqlite 0.40 or newer,
+    whose default `ffi-sqlite-wasm-rs` swaps the bundled SQLite for one that compiles against a
+    wasm shim, and a hardening list without `zerocallusedregs`, because the nixpkgs clang
+    wrapper passes an option clang refuses for a wasm target.
 
 ## 3. What a change to the algorithm has to show
 
