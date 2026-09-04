@@ -151,7 +151,10 @@ No em dashes. Sentence case in headings. Name the actor rather than writing in t
 ## 6. Tooling
 
 - **just** runs everything: `just check` is the PR gate, `just analyze` and `just selftest`
-  are the two things you run while working.
+  are the two things you run while working. Recipes take their arguments as positional
+  parameters (`set positional-arguments`, then `"$@"`), never as `{{ARGS}}` spliced into the
+  command line: a track is called `Artist,_Other-Title_(Extended_Mix).wav`, and interpolating
+  that unquoted hands the shell an ampersand and a subshell to parse.
 - **devenv** provides the shell: the toolchain pinned in `rust-toolchain.toml`, `just`,
   `treefmt`, `crate2nix`. `direnv allow`, or `devenv shell`.
 - **crate2nix** resolves the crate graph ahead of time into `Cargo.nix`, which

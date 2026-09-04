@@ -1,3 +1,9 @@
+# Arguments reach a recipe as positional parameters rather than being spliced
+# into the command line as text. A track is called
+# "Artist,_Other-Title_(Extended_Mix).wav", and interpolating that unquoted
+# hands the shell an ampersand and a subshell to parse.
+set positional-arguments
+
 _default:
     @just --list
 
@@ -7,11 +13,11 @@ build:
 
 # Analyse a file: just analyze "track.wav" [--start 60 --duration 60 …]
 analyze +ARGS:
-    cargo run --release --bin music-analyze -- analyze {{ARGS}}
+    cargo run --release --bin music-analyze -- analyze "$@"
 
 # Name files after what was measured in them: just rename <file|dir>... [flags]
 rename +ARGS:
-    cargo run --release --bin music-analyze -- rename {{ARGS}}
+    cargo run --release --bin music-analyze -- rename "$@"
 
 # Build the renamed library as one Nix output, from ./archives and ./audio
 library:
@@ -23,11 +29,15 @@ usb FORMAT="":
 
 # Write a device tree from analysed tracks: just export <dir> --audio A --reports R
 export OUT +ARGS:
-    cargo run --release --bin music-analyze -- export --out {{OUT}} {{ARGS}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$1"
+    shift
+    cargo run --release --bin music-analyze -- export --out "$out" "$@"
 
 # Measure a generated pulse train, which has no ambiguity to hide behind
 selftest *ARGS:
-    cargo run --release --bin music-analyze -- selftest {{ARGS}}
+    cargo run --release --bin music-analyze -- selftest "$@"
 
 # Every test in the workspace
 test:
