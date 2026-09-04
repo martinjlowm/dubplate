@@ -138,8 +138,9 @@ struct AnalyzeArgs {
     #[arg(long)]
     duration: Option<f64>,
 
-    /// Start of the window the novelty figure covers, in seconds. Defaults to a
-    /// quarter of the way in, which for most tracks is past the intro.
+    /// Start of the window the novelty figure covers, in seconds from the start
+    /// of the file. Defaults to a quarter of the way into what was analysed,
+    /// which for most tracks is past the intro.
     #[arg(long)]
     plot_start: Option<f64>,
 
@@ -278,9 +279,14 @@ fn analyze(args: AnalyzeArgs) -> Result<()> {
     }
 
     if !args.no_figures {
+        // Both the novelty axis and the beat times are absolute seconds in the
+        // file, so this window is too. A window measured from zero on an
+        // excerpt that starts at 96 s contains none of its beats, and the
+        // figure then draws a grid line for none of them.
+        let source = &outcome.report.source;
         let plot_start = args
             .plot_start
-            .unwrap_or(outcome.report.source.analysed_seconds * 0.25);
+            .unwrap_or(source.analysed_start_seconds + source.analysed_seconds * 0.25);
         figures::write_all(&out, &outcome, plot_start, args.plot_window)?;
     }
 

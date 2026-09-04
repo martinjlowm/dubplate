@@ -22,3 +22,8 @@ waveform.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+# The CLI test writes a pulse train for the binary to read, because a fixture
+# whose true tempo is an assumption cannot tell a bad figure from a bad track.
+hound.workspace = true

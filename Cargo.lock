@@ -249,6 +249,7 @@ dependencies = [
  "collection",
  "diagnostics",
  "engine",
+ "hound",
  "key-detect",
  "rekordbox",
  "report",

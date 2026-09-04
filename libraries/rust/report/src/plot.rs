@@ -200,17 +200,23 @@ impl LinePlot {
             };
             let _ = write!(
                 svg,
-                r#"<line x1="{x:.1}" y1="{:.1}" x2="{x:.1}" y2="{:.1}" stroke="{}" stroke-width="1"{dash} opacity="0.8"/>"#,
+                r#"<line x1="{x:.1}" y1="{:.1}" x2="{x:.1}" y2="{:.1}" stroke="{}" stroke-width="1.3"{dash} opacity="0.95"/>"#,
                 MARGIN_TOP,
                 MARGIN_TOP + plot_height,
                 marker.colour
             );
             if let Some(label) = &marker.label {
+                // Below the legend when there is one, which occupies the same
+                // corner and otherwise prints through these labels.
+                let label_y = if self.series.len() > 1 {
+                    MARGIN_TOP + 30.0
+                } else {
+                    MARGIN_TOP + 12.0
+                };
                 let _ = write!(
                     svg,
-                    r#"<text x="{:.1}" y="{:.1}" class="tick" fill="{}" text-anchor="start">{}</text>"#,
+                    r#"<text x="{:.1}" y="{label_y:.1}" class="tick" fill="{}" text-anchor="start">{}</text>"#,
                     x + 3.0,
-                    MARGIN_TOP + 12.0,
                     marker.colour,
                     escape(label)
                 );

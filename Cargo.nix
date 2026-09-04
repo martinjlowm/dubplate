@@ -843,6 +843,12 @@ rec {
             packageId = "waveform";
           }
         ];
+        devDependencies = [
+          {
+            name = "hound";
+            packageId = "hound";
+          }
+        ];
 
       };
       "either" = rec {

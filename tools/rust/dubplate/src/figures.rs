@@ -10,7 +10,10 @@ use std::path::Path;
 const NOVELTY_COLOUR: &str = "#0f766e";
 const COMB_COLOUR: &str = "#2563eb";
 const FOURIER_COLOUR: &str = "#c2410c";
-const BEAT_COLOUR: &str = "#94a3b8";
+// Dark enough to separate a fitted beat from the axis grid behind it, which is
+// #e2e8f0. The whole argument for a tempo is whether these lines sit on the
+// peaks, so they have to be the most readable thing in the figure.
+const BEAT_COLOUR: &str = "#475569";
 
 pub fn write_all(out: &Path, outcome: &Outcome, plot_start: f64, plot_window: f64) -> Result<()> {
     let report = &outcome.report;
