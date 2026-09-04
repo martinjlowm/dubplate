@@ -154,7 +154,14 @@ for `outputs.library`.
 Written with `mkfs.vfat` and `mtools`, so no mounting and no root. `fsck.vfat`
 reads the result back at the end of the build.
 
-Copy one to a stick with `dd if=result/usb-flac.img of=/dev/diskN bs=4m`, having
-checked twice which disk that is. The combined output holds `wav.img`,
-`flac.img` and `mp3.img` as links, so the same command works from there with the
-name changed.
+`devenv build` prints the store path it wrote rather than leaving a `result`
+symlink. The image is the `.img` file inside that path, so copying one to a
+stick reads:
+
+```sh
+dd if=/nix/store/…-usb-flac.img/usb-flac.img of=/dev/diskN bs=4m
+```
+
+Check twice which disk that is. The combined output holds `wav.img`, `flac.img`
+and `mp3.img` as links, so the same command works from there with the name
+changed.

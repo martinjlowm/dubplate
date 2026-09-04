@@ -1,6 +1,6 @@
 # music-analyze
 
-Tempo and key analysis for WAV files, written to be argued with.
+Tempo and key analysis you can argue with, and a USB stick built from it.
 
 Most tools print one number. When that number is wrong, and for a track with a half-time
 intro or an offbeat bassline it often is, there is nothing to inspect and no way to tell a
@@ -8,12 +8,58 @@ bad recording from a bad algorithm. This one writes out the curve the tempo came
 salience of every competing tempo, the beat grid drawn over the onsets it was fitted to, and
 a list of the reasons it might be wrong. The answer is a claim with its evidence attached.
 
-It also writes what it measured onto a USB stick a player will browse: a rekordbox database for
-Pioneer gear, an Engine Library for Denon, and per-track beat grids, cues and waveforms, on a
-FAT32 image built by Nix.
+The same measurements then go onto a stick a player will browse. A Nix pipeline takes the
+zips as they were downloaded, analyses every track in parallel, names each file after its
+tempo and key, and writes a rekordbox database for Pioneer gear and an Engine Library for
+Denon onto a FAT32 image, with the beat grids, cues and waveforms both read.
+
+Keys are Camelot throughout: `8A` rather than `A minor`, on the terminal, in the report, in
+the file names and in both databases.
 
 Everything is measured on the file. Nothing is looked up, and the tool never talks to a
 network.
+
+---
+
+## In and out
+
+Put the zips where they landed. Get a stick that plays.
+
+```
+  archives/*.zip          ┌──────────────────────────────┐        outputs.usb.wav  ──►  wav.img
+  audio/*.wav             │  unpack, analyse each track  │        outputs.usb.flac ──►  flac.img
+  audio/*.flac      ──►   │  in its own derivation,      │  ──►   outputs.usb.mp3  ──►  mp3.img
+  audio/*.mp3             │  name, encode, write both    │        outputs.usb      ──►  all three
+                          │  databases, make the image   │
+                          └──────────────────────────────┘
+```
+
+Each image is one FAT32 filesystem, which is what a CDJ mounts and what a Denon deck reads
+too, holding:
+
+| On the image | For |
+|---|---|
+| `/Contents/138_03A_Artist-Title.flac` | The audio, named after its own tempo and key, zero padded so a plain listing sorts by tempo and then around the wheel. |
+| `/PIONEER/rekordbox/export.pdb` | **Pioneer.** The DeviceSQL database a CDJ, XDJ or RX3 browses: tracks, artists, keys, one playlist. |
+| `/PIONEER/USBANLZ/…/ANLZ0000.DAT` and `.EXT` | **Pioneer.** Per track: the beat grid, the cue, the monochrome waveforms and the colour pair a Nexus 2 or newer draws. |
+| `/Engine Library/Database2/m.db` | **Denon.** Engine schema 2.21.2, which Engine DJ 2 and 3 read: tempo, key, beat grid, cue slots, overview waveform. |
+
+Both databases go on every image. They read different directories, neither player looks at
+the other's, and the audio is shared, so one stick works in whichever booth you walk into.
+
+A WAV lands in all three images, encoded to FLAC and MP3 on the way. A FLAC or an MP3 lands
+in its own format only, because transcoding a lossy source spends CPU to lose more.
+
+```sh
+just usb flac        # or: just usb, for all three
+```
+
+`devenv build` prints the store path it wrote, and the image is inside it. Copying one to a
+stick is `dd`, so read the disk number twice:
+
+```sh
+dd if=/nix/store/…-usb-flac.img/usb-flac.img of=/dev/diskN bs=4m
+```
 
 ---
 
@@ -49,7 +95,7 @@ WAV file.
    ```
 
    ```
-   137.99 BPM   A# minor (3A)   7:02 analysed
+   137.99 BPM   3A   7:03 analysed
      grid      99% of beats within 50 ms, pulse 4.98x the mean, bar phase 1 (contrast 1.60)
      windows   median 137.99 BPM, spread 0.01 BPM, 98% agree
      also      68.97 (0.88), 91.98 (0.73), 184.14 (0.44)
@@ -82,7 +128,7 @@ WAV file.
    ```
 
    ```
-   91.98 BPM   A# minor (3A)   7:03 analysed
+   91.98 BPM   3A   7:03 analysed
      grid      91% of beats within 50 ms, pulse 2.26x the mean, bar phase 1 (contrast 2.48)
    ```
 
@@ -103,10 +149,26 @@ WAV file.
    is lying. One of them applies a rule about how dance music is counted, and it says so in
    the findings.
 
-You now know the loop: read the headline, read the findings, force the competing tempo, and
-compare grid fits. The [how-to guides](#how-to-guides) cover the rest of the tasks, and
+7. **Put it on a stick.** The same analysis, run over a whole library and written where a
+   player looks for it:
+
+   ```sh
+   mkdir -p audio
+   cp "Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav" audio/
+   just usb flac
+   ```
+
+   Nix analyses each track in its own derivation, using the tool you just ran by hand, and
+   builds a FAT32 image holding `Contents/138_03A_Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).flac`,
+   a rekordbox database and an Engine Library. Copy it over with `dd` and the deck reads the
+   tempo, the key, the grid and the waveform without analysing anything itself.
+
+You now know both loops: read the headline, read the findings, force the competing tempo and
+compare grid fits; then let the pipeline do the same to everything and write the result where
+a player reads it. The [how-to guides](#how-to-guides) cover the rest of the tasks,
 [docs/02-troubleshooting-a-tempo.md](docs/02-troubleshooting-a-tempo.md) is the decision
-procedure keyed on the diagnostic codes.
+procedure keyed on the diagnostic codes, and
+[docs/04-device-export.md](docs/04-device-export.md) says exactly what lands on the stick.
 
 ---
 
@@ -176,7 +238,11 @@ The spectrogram shows the same thing as a flat black band across the top.
 Read `key.tuning_cents` first. Beyond about 15 cents the track is not at A = 440 Hz, the
 chroma mapping was shifted to compensate, and any tool that skipped that step read a
 different set of notes. Then read `key.margin`. Under 0.05 the winner and the runner-up are
-indistinguishable, and they are usually a key and its relative, which share every note.
+indistinguishable, and they are usually a key and its relative, which share every note and,
+on the wheel, share a number: `8A` against `8B`.
+
+Keys are reported in Camelot. `key.name` in the report and the second column of the key table
+on the page carry the same key as notes, for when that is what you want.
 
 Both profiles are available, and they disagree on tracks built from a repeating loop:
 
@@ -210,41 +276,36 @@ cp ~/Downloads/beatport_tracks_*.zip archives/
 just library
 ```
 
-Each track inside each archive becomes its own derivation, so Nix analyses as many at once as
-it builds anything else, and one bad file fails one track rather than the batch. The outputs
-nest, so you can take the lot or one format of it:
+That gives the named files without building an image, which is what you want when the
+destination is a hard drive rather than a stick. Take all three formats or one:
 
 ```sh
 devenv build outputs.library         # wav/ flac/ mp3/ side by side
-devenv build outputs.library.flac    # one format, for copying to a player
+devenv build outputs.library.flac    # one format, plus .analysis for the reports
 ```
 
-```
-outputs.library        every track named <BPM>_<KEY>_<original name>, three formats side by side
-outputs.library.flac   that one format;  .analysis holds the reports
-outputs.usb            a FAT32 image per format, side by side
-outputs.usb.flac       that one image
-```
+Each track inside each archive becomes its own derivation, so Nix analyses as many at once as
+it builds anything else, and one bad file fails one track rather than the batch. Loose files
+work too: put them in `audio/` instead of zipping them.
 
-A WAV lands in all three formats, encoded to FLAC and to MP3 on the way. A FLAC or an MP3
-lands in its own directory only, because transcoding a lossy source spends CPU to lose more.
-Loose files work too: put them in `audio/` instead of zipping them.
-
-### Build a USB stick for a CDJ
+### Build a USB stick for a CDJ or a Denon deck
 
 ```sh
 just usb flac                   # or wav, or mp3, or `just usb` for all three
 ```
 
-That analyses every track in `archives/` and `audio/`, names each one after its tempo and
-key, encodes the format you asked for, writes both players' databases and the per-track
-analysis files, and puts the lot on a FAT32 image. Copy it to a stick:
+devenv prints the store path it built. The image is the `.img` file inside it, so copying to
+a stick reads:
 
 ```sh
-dd if=result/usb-flac.img of=/dev/diskN bs=4m     # check twice which disk that is
+dd if=/nix/store/…-usb-flac.img/usb-flac.img of=/dev/diskN bs=4m   # check the disk twice
 ```
 
-The database and the audio are separate derivations, so changing a database field does not
+Building `outputs.usb` instead gives one directory of all three, named `wav.img`, `flac.img`
+and `mp3.img`. Beside each single image is `device`, a link to the databases on their own,
+which is what to read when a player refuses a stick.
+
+The databases and the audio are separate derivations, so changing a database field does not
 recopy several gigabytes of audio.
 
 ### Look at a device tree without building an image
@@ -333,11 +394,30 @@ Every flag, every JSON field and every diagnostic code is in
 [docs/03-report-reference.md](docs/03-report-reference.md); everything the device export
 writes is in [docs/04-device-export.md](docs/04-device-export.md).
 
+### Nix outputs
+
+Both trees nest, so a build takes the lot or one format of it.
+
+| Output | What it is |
+|---|---|
+| `outputs.music-analyze` | The CLI, built through the committed crate graph. |
+| `outputs.library` | Every track named `<BPM>_<KEY>_<original name>`, the three formats side by side. |
+| `outputs.library.flac` | One format. `.wav` and `.mp3` likewise; `.analysis` holds the reports. |
+| `outputs.usb` | A FAT32 image per format, side by side as `wav.img`, `flac.img`, `mp3.img`. |
+| `outputs.usb.flac` | One image, with `device` beside it linking the databases on their own. |
+
+`library` is one derivation with several outputs; `usb` is three derivations behind one,
+since each image is built from different audio.
+
 ### Input format
 
-WAV only, any sample rate, any channel count, 16, 24 or 32-bit integer or float. Channels are
-averaged to mono and nothing is resampled. The tool refuses anything shorter than 30 seconds
-rather than reporting a tempo it measured once.
+The analyser reads WAV: any sample rate, any channel count, 16, 24 or 32-bit integer or float.
+Channels are averaged to mono and nothing is resampled. It refuses anything shorter than 30
+seconds rather than reporting a tempo it measured once.
+
+The pipeline takes WAV, FLAC and MP3 out of the archives and decodes the last two with `flac`
+and `lame` before the analyser sees them, which keeps one decoder per format and each of them
+the reference implementation for it.
 
 ---
 
@@ -433,6 +513,17 @@ The cost is import from derivation. Nothing in Nix can list the contents of a zi
 unpacking one, so the archive is imported into the store and a manifest is built and read
 during evaluation. On a gigabyte of downloads the first run says nothing for as long as that
 copy takes.
+
+### Keys are Camelot
+
+`8A` says two things a DJ acts on: which key, and which keys mix with it. `A minor` says one
+of them and leaves the other as a piece of theory to do in your head at the wrong moment. So
+the wheel is what the terminal prints, what the file names carry, what the rekordbox database
+stores for a player to display and sort by, and what Engine gets as its key number.
+
+The musical name is still measured and still in the report, as `key.name` and as a column on
+the page. Nothing is lost; the reading order is just the one that matches how the answer gets
+used.
 
 ### Why Rust, and why the graph is committed
 
