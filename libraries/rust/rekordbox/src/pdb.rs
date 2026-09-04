@@ -144,7 +144,7 @@ impl Database {
 
     /// Serialise the whole file.
     pub fn write(&self, out: &mut impl Write) -> io::Result<()> {
-        let layout = self.layout();
+        let layout = self.layout()?;
         let mut header = vec![0u8; PAGE_SIZE];
         let mut cursor = Cursor::new(&mut header);
 
@@ -188,7 +188,7 @@ impl Database {
     }
 
     /// Decide which rows go on which page, and number the pages.
-    fn layout(&self) -> Layout {
+    fn layout(&self) -> io::Result<Layout> {
         // Page zero is the header.
         let mut next_index = 1;
         let mut tables = Vec::with_capacity(self.tables.len());
@@ -202,7 +202,7 @@ impl Database {
             }];
             let mut first_row = 0;
             while first_row < table.rows.len() {
-                let count = rows_that_fit(&table.rows[first_row..]);
+                let count = rows_that_fit(&table.rows[first_row..])?;
                 pages.push(PagePlan {
                     first_row,
                     row_count: count,
@@ -220,10 +220,10 @@ impl Database {
             });
         }
 
-        Layout {
+        Ok(Layout {
             total_pages: next_index,
             tables,
-        }
+        })
     }
 }
 
@@ -245,22 +245,30 @@ struct PagePlan {
 }
 
 /// How many of these rows fit on one page, rows and their row groups together.
-fn rows_that_fit(rows: &[RowBytes]) -> usize {
+///
+/// A row that does not fit an empty page has nowhere to go. Reaching that needs
+/// a few thousand bytes of strings in one row, and every one of those strings
+/// comes from a file name, so the caller is told rather than panicked at.
+fn rows_that_fit(rows: &[RowBytes]) -> io::Result<usize> {
     let mut used = 0usize;
     for (count, row) in rows.iter().enumerate() {
         let start = used.next_multiple_of(ROW_ALIGNMENT);
         let groups = (count + 1).div_ceil(ROWS_PER_GROUP) * ROW_GROUP_SIZE;
         if start + row.bytes.len() + groups > HEAP_SIZE {
-            assert!(
-                count > 0,
-                "a single row of {} bytes does not fit a page",
-                row.bytes.len()
-            );
-            return count;
+            if count == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "a row of {} bytes does not fit a {PAGE_SIZE}-byte page, which holds {HEAP_SIZE} bytes of rows",
+                        row.bytes.len()
+                    ),
+                ));
+            }
+            return Ok(count);
         }
         used = start + row.bytes.len();
     }
-    rows.len()
+    Ok(rows.len())
 }
 
 /// Serialise one page.

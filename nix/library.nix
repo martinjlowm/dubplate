@@ -33,7 +33,17 @@
     mkdir -p "$out" "$wav" "$flac" "$mp3" "$analysis" source decoded reports
     ${fetch}
 
-    file=$(ls source | head -n 1)
+    # A glob rather than `ls`, and no command substitution, because a track is
+    # called "Artist,_Other-Title_(Extended_Mix).wav" and nothing stops a shop
+    # putting a newline in one. `ls` reports such a name as two lines and `$()`
+    # strips the trailing one.
+    file=
+    for candidate in source/*; do
+      if [ -f "$candidate" ]; then
+        file=''${candidate#source/}
+        break
+      fi
+    done
     if [ -z "$file" ]; then
       echo "nothing was unpacked" >&2
       exit 1
