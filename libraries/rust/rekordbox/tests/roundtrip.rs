@@ -15,7 +15,21 @@ use rekordcrate::pdb::{
 };
 use std::io::Cursor;
 use std::path::PathBuf;
-use waveform::Waveform;
+use waveform::{Column, Waveform};
+
+/// A waveform whose columns rise and fall, so a reader can tell one column from
+/// the next.
+fn flat_waveform(columns_per_second: f64, count: usize) -> Waveform {
+    let columns: Vec<Column> = (0..count)
+        .map(|index| Column {
+            height: (index % 32) as u8,
+            low: (index % 8) as u8,
+            mid: ((index / 2) % 8) as u8,
+            high: ((index / 4) % 8) as u8,
+        })
+        .collect();
+    Waveform::from_columns(columns_per_second, &columns)
+}
 
 fn track(name: &str, bpm: f64, key: &str) -> Track_ {
     let beats = (0..64)
@@ -50,14 +64,8 @@ fn track(name: &str, bpm: f64, key: &str) -> Track_ {
             number: 1,
             comment: String::new(),
         }],
-        preview: Waveform {
-            columns_per_second: 1.0,
-            columns: vec![0x2a; 400],
-        },
-        detail: Waveform {
-            columns_per_second: 150.0,
-            columns: vec![0x11; 6000],
-        },
+        preview: flat_waveform(1.0, 1200),
+        detail: flat_waveform(150.0, 6000),
     }
 }
 

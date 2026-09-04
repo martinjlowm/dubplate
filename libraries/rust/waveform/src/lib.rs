@@ -1,16 +1,15 @@
 //! The waveform a player draws on its screen.
 //!
-//! One column is a height and a shade. Both Pioneer and Denon draw the same two
-//! things, at different resolutions and in different byte layouts, so the
-//! columns are computed once here in a device-neutral form and each exporter
-//! packs them its own way.
+//! One column is a height and a balance between three frequency bands. Pioneer
+//! and Denon both draw the same two pictures, a whole-track preview and a
+//! scrolling detail view, and both colour them by that balance, so the columns
+//! are computed once here and each exporter packs them its own way.
 //!
-//! Height comes from the peak sample in the column and shade from how much of
-//! that column's energy is above 500 Hz, which is what makes a kick read as dark
-//! and a hi-hat as bright. The split is a one-pole filter over the samples
-//! rather than a second transform: at 150 columns per second a column is 294
-//! samples, which is shorter than any window that would resolve the split
-//! properly, and the eye is being served here rather than the analysis.
+//! Height comes from the peak sample in the column. The bands come from three
+//! one-pole filters run over the samples rather than from a second transform: at
+//! 150 columns per second a column is 294 samples, which is shorter than a
+//! window that would resolve the split properly, and the eye is being served
+//! here rather than the analysis.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,37 +20,105 @@ use serde::{Deserialize, Serialize};
 /// draws a track that drifts against its own beats.
 pub const DETAIL_COLUMNS_PER_SECOND: f64 = 150.0;
 
-/// Columns in the whole-track preview, also fixed by the format.
+/// Columns in the monochrome whole-track preview, also fixed by the format.
 pub const PREVIEW_COLUMNS: usize = 400;
 
-/// Crossover between the dark and bright halves of the shade calculation.
-const SHADE_CROSSOVER_HZ: f64 = 500.0;
+/// Columns in the colour whole-track preview.
+pub const COLOUR_PREVIEW_COLUMNS: usize = 1200;
 
-/// A waveform as columns of height and shade.
+/// Crossovers between the three bands a column is coloured by, in hertz.
+///
+/// 200 Hz puts a kick and a bassline in the low band on its own. 2 kHz is above
+/// everything with a fundamental and below most of what a hi-hat is made of.
+const BAND_CROSSOVERS_HZ: [f64; 3] = [200.0, 2000.0, 10_000.0];
+
+/// One column: a height, and how the energy in it splits three ways.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Column {
+    /// 0 to 31, as every format that draws it stores five bits.
+    pub height: u8,
+    /// 0 to 7 each, scaled so the loudest band of the column reads 7. Colour is
+    /// a balance rather than a level: the level is the height.
+    pub low: u8,
+    pub mid: u8,
+    pub high: u8,
+}
+
+impl Column {
+    /// Two bytes, which is what the JSON carries.
+    ///
+    /// A seven-minute track is 63 000 detail columns. As a JSON array of
+    /// numbers that is a megabyte of digits and commas per track; packed and
+    /// base64-encoded it is 170 kB.
+    fn pack(&self) -> [u8; 2] {
+        [
+            (self.height & 0x1f) | ((self.low & 0x07) << 5),
+            (self.mid & 0x07) | ((self.high & 0x07) << 3),
+        ]
+    }
+
+    fn unpack(bytes: [u8; 2]) -> Self {
+        Column {
+            height: bytes[0] & 0x1f,
+            low: (bytes[0] >> 5) & 0x07,
+            mid: bytes[1] & 0x07,
+            high: (bytes[1] >> 3) & 0x07,
+        }
+    }
+
+    /// The shade a monochrome waveform draws this column in, 0 to 7.
+    ///
+    /// Brightness follows the top of the spectrum, which is what makes a hi-hat
+    /// read white and a kick read dark in the old two-colour views.
+    pub fn shade(&self) -> u8 {
+        self.high.max(self.mid.saturating_sub(2))
+    }
+}
+
+/// A waveform as columns.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Waveform {
     pub columns_per_second: f64,
-    /// Height in `0..=31`, shade in `0..=7`, packed as rekordbox packs them:
-    /// height in the low five bits, shade in the top three.
+    /// Two bytes per column, base64 in JSON.
     #[serde(with = "base64_bytes")]
-    pub columns: Vec<u8>,
+    packed: Vec<u8>,
 }
 
 impl Waveform {
-    pub fn height(&self, column: usize) -> u8 {
-        self.columns.get(column).map_or(0, |c| c & 0x1f)
+    pub fn from_columns(columns_per_second: f64, columns: &[Column]) -> Self {
+        Waveform {
+            columns_per_second,
+            packed: columns.iter().flat_map(|column| column.pack()).collect(),
+        }
     }
 
-    pub fn shade(&self, column: usize) -> u8 {
-        self.columns.get(column).map_or(0, |c| c >> 5)
+    pub fn column(&self, index: usize) -> Column {
+        let at = index * 2;
+        match self.packed.get(at..at + 2) {
+            Some(bytes) => Column::unpack([bytes[0], bytes[1]]),
+            None => Column {
+                height: 0,
+                low: 0,
+                mid: 0,
+                high: 0,
+            },
+        }
+    }
+
+    pub fn columns(&self) -> impl Iterator<Item = Column> + '_ {
+        (0..self.len()).map(|index| self.column(index))
     }
 
     pub fn len(&self) -> usize {
-        self.columns.len()
+        self.packed.len() / 2
     }
 
     pub fn is_empty(&self) -> bool {
-        self.columns.is_empty()
+        self.packed.is_empty()
+    }
+
+    pub fn height(&self, index: usize) -> u8 {
+        self.column(index).height
     }
 }
 
@@ -60,24 +127,35 @@ pub fn render(samples: &[f32], sample_rate: u32, column_count: usize) -> Wavefor
     let column_count = column_count.max(1);
     let seconds = samples.len() as f64 / sample_rate as f64;
     let mut peaks = vec![0.0f32; column_count];
-    let mut low_energy = vec![0.0f64; column_count];
-    let mut high_energy = vec![0.0f64; column_count];
+    // Low, mid, high and everything above the top crossover, which is folded
+    // into the high band for colour but kept separate while filtering.
+    let mut energy = vec![[0.0f64; 4]; column_count];
 
-    // One-pole low pass. The coefficient is the usual exp(-2 pi fc / fs) form,
-    // so the crossover stays at 500 Hz whatever the file's sample rate is.
-    let coefficient = (-std::f64::consts::TAU * SHADE_CROSSOVER_HZ / sample_rate as f64).exp();
-    let mut low_state = 0.0f64;
+    // One-pole low passes at each crossover. The coefficient is the usual
+    // exp(-2 pi fc / fs) form, so the crossovers stay where they are whatever
+    // the file's sample rate is.
+    let coefficients =
+        BAND_CROSSOVERS_HZ.map(|hz| (-std::f64::consts::TAU * hz / sample_rate as f64).exp());
+    let mut states = [0.0f64; 3];
 
     for (index, &sample) in samples.iter().enumerate() {
-        let column = index * column_count / samples.len().max(1);
-        let column = column.min(column_count - 1);
+        let column = (index * column_count / samples.len().max(1)).min(column_count - 1);
+        let value = sample as f64;
 
-        low_state = sample as f64 * (1.0 - coefficient) + low_state * coefficient;
-        let high = sample as f64 - low_state;
+        for (state, coefficient) in states.iter_mut().zip(coefficients) {
+            *state = value * (1.0 - coefficient) + *state * coefficient;
+        }
+        let bands = [
+            states[0],
+            states[1] - states[0],
+            states[2] - states[1],
+            value - states[2],
+        ];
 
         peaks[column] = peaks[column].max(sample.abs());
-        low_energy[column] += low_state * low_state;
-        high_energy[column] += high * high;
+        for (accumulated, band) in energy[column].iter_mut().zip(bands) {
+            *accumulated += band * band;
+        }
     }
 
     // Scaled against a high percentile rather than the maximum: one clipped
@@ -92,28 +170,40 @@ pub fn render(samples: &[f32], sample_rate: u32, column_count: usize) -> Wavefor
         .unwrap_or(1.0)
         .max(1e-6);
 
-    let columns = (0..column_count)
+    let columns: Vec<Column> = (0..column_count)
         .map(|column| {
             let height = ((peaks[column] / reference).clamp(0.0, 1.0) * 31.0).round() as u8;
-            let total = low_energy[column] + high_energy[column];
-            let shade = if total > 0.0 {
-                ((high_energy[column] / total).clamp(0.0, 1.0) * 7.0).round() as u8
-            } else {
-                0
+            let [low, mid, high, air] = energy[column];
+            let high = high + air;
+            let loudest = low.max(mid).max(high);
+            let level = |band: f64| {
+                if loudest > 0.0 {
+                    ((band / loudest).clamp(0.0, 1.0) * 7.0).round() as u8
+                } else {
+                    0
+                }
             };
-            (shade << 5) | height.min(31)
+            Column {
+                height: height.min(31),
+                low: level(low),
+                mid: level(mid),
+                high: level(high),
+            }
         })
         .collect();
 
-    Waveform {
-        columns_per_second: column_count as f64 / seconds.max(f64::MIN_POSITIVE),
-        columns,
-    }
+    Waveform::from_columns(
+        column_count as f64 / seconds.max(f64::MIN_POSITIVE),
+        &columns,
+    )
 }
 
 /// The whole-track preview a player shows above the detailed view.
+///
+/// Rendered at the colour preview's width, which is three times the monochrome
+/// one, so both can be written from the same columns.
 pub fn preview(samples: &[f32], sample_rate: u32) -> Waveform {
-    render(samples, sample_rate, PREVIEW_COLUMNS)
+    render(samples, sample_rate, COLOUR_PREVIEW_COLUMNS)
 }
 
 /// The scrolling waveform, at the fixed rate the format reads it back at.
@@ -130,9 +220,31 @@ pub fn detail(samples: &[f32], sample_rate: u32) -> Waveform {
     waveform
 }
 
-/// Base64 in JSON, because a detailed waveform is one byte per column and a
-/// seven-minute track has 63 000 of them. As a JSON array of numbers that is a
-/// quarter of a megabyte of digits and commas per track.
+/// Resample a waveform to a fixed number of columns, keeping peaks.
+///
+/// The formats disagree about width: 400 columns for the monochrome preview,
+/// 1200 for the colour one, 100 for the tiny view on the track list. Peaks are
+/// kept rather than averaged, because a waveform that loses them looks like a
+/// track with no transients.
+pub fn resample(waveform: &Waveform, column_count: usize) -> Vec<Column> {
+    (0..column_count)
+        .map(|column| {
+            let from = column * waveform.len() / column_count.max(1);
+            let to = ((column + 1) * waveform.len() / column_count.max(1)).max(from + 1);
+            (from..to)
+                .map(|index| waveform.column(index))
+                .max_by_key(|column| column.height)
+                .unwrap_or(Column {
+                    height: 0,
+                    low: 0,
+                    mid: 0,
+                    high: 0,
+                })
+        })
+        .collect()
+}
+
+/// Base64 in JSON.
 mod base64_bytes {
     use serde::{Deserialize, Deserializer, Serializer};
 

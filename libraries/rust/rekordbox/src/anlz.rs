@@ -3,8 +3,9 @@
 //!
 //! Two files per track. `ANLZ0000.DAT` carries what every player since the
 //! CDJ-2000 reads: the path, the beat grid, the cue lists and the monochrome
-//! waveforms. `ANLZ0000.EXT` carries the later additions, of which this writes
-//! the detailed waveform.
+//! waveforms. `ANLZ0000.EXT` carries the later additions: the detailed
+//! waveform, and the colour pair a Nexus 2 or newer player draws in preference
+//! to the monochrome one.
 //!
 //! Everything here is big-endian, unlike the database, and every section is a
 //! four-character kind, a header length, a total length, then content.
@@ -12,6 +13,7 @@
 //! Format reference: <https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/anlz.html>
 
 use collection::{CueKind, Track};
+use waveform::{COLOUR_PREVIEW_COLUMNS, Column, PREVIEW_COLUMNS};
 
 /// Columns in the tiny preview a player draws on the track list.
 const TINY_PREVIEW_COLUMNS: usize = 100;
@@ -36,6 +38,8 @@ pub fn ext(track: &Track) -> Vec<u8> {
     let mut sections = Vec::new();
     sections.extend(path_section(&track.device_path));
     sections.extend(waveform_detail(track));
+    sections.extend(colour_waveform_preview(track));
+    sections.extend(colour_waveform_detail(track));
     file(sections)
 }
 
@@ -145,12 +149,21 @@ fn cue_list(track: &Track, kind: CueKind) -> Vec<u8> {
     section(b"PCOB", 0x18, &body)
 }
 
-/// `PWAV`: the 400-column preview, one byte per column.
+/// One byte of a monochrome waveform: height in the low five bits, shade in the
+/// top three.
+fn monochrome(column: &Column) -> u8 {
+    (column.shade() << 5) | (column.height & 0x1f)
+}
+
+/// `PWAV`: the 400-column monochrome preview, one byte per column.
 fn waveform_preview(track: &Track) -> Vec<u8> {
-    let mut body = Vec::with_capacity(8 + track.preview.len());
-    body.extend_from_slice(&(track.preview.len() as u32).to_be_bytes());
+    let columns = waveform::resample(&track.preview, PREVIEW_COLUMNS);
+    let content: Vec<u8> = columns.iter().map(monochrome).collect();
+
+    let mut body = Vec::with_capacity(8 + content.len());
+    body.extend_from_slice(&(content.len() as u32).to_be_bytes());
     body.extend_from_slice(&0x0010_0000u32.to_be_bytes());
-    body.extend_from_slice(&track.preview.columns);
+    body.extend_from_slice(&content);
     section(b"PWAV", 0x14, &body)
 }
 
@@ -159,14 +172,9 @@ fn waveform_preview(track: &Track) -> Vec<u8> {
 /// Only the height matters here, in the low four bits, so the columns are
 /// re-quantised rather than reused.
 fn tiny_waveform_preview(track: &Track) -> Vec<u8> {
-    let source = &track.preview;
-    let content: Vec<u8> = (0..TINY_PREVIEW_COLUMNS)
-        .map(|column| {
-            let from = column * source.len() / TINY_PREVIEW_COLUMNS;
-            let to = ((column + 1) * source.len() / TINY_PREVIEW_COLUMNS).max(from + 1);
-            let peak = (from..to).map(|i| source.height(i)).max().unwrap_or(0);
-            peak / 2 // 0..=31 becomes 0..=15
-        })
+    let content: Vec<u8> = waveform::resample(&track.preview, TINY_PREVIEW_COLUMNS)
+        .iter()
+        .map(|column| column.height / 2) // 0..=31 becomes 0..=15
         .collect();
 
     let mut body = Vec::with_capacity(8 + content.len());
@@ -178,11 +186,71 @@ fn tiny_waveform_preview(track: &Track) -> Vec<u8> {
 
 /// `PWV3`: the scrolling waveform, 150 columns per second.
 fn waveform_detail(track: &Track) -> Vec<u8> {
-    let mut body = Vec::with_capacity(12 + track.detail.len());
+    let content: Vec<u8> = track.detail.columns().map(|c| monochrome(&c)).collect();
+
+    let mut body = Vec::with_capacity(12 + content.len());
     body.extend_from_slice(&1u32.to_be_bytes()); // bytes per column
-    body.extend_from_slice(&(track.detail.len() as u32).to_be_bytes());
+    body.extend_from_slice(&(content.len() as u32).to_be_bytes());
     // Constant in every file that has been examined.
     body.extend_from_slice(&0x0096_0000u32.to_be_bytes());
-    body.extend_from_slice(&track.detail.columns);
+    body.extend_from_slice(&content);
     section(b"PWV3", 0x18, &body)
+}
+
+/// `PWV4`: the colour preview, six bytes per column over 1200 columns.
+///
+/// There is no height field here: the player draws the column from the energies
+/// themselves, so each band is scaled by the column's height as well as by its
+/// share of the column.
+fn colour_waveform_preview(track: &Track) -> Vec<u8> {
+    let columns = waveform::resample(&track.preview, COLOUR_PREVIEW_COLUMNS);
+    let mut content = Vec::with_capacity(columns.len() * 6);
+    for column in &columns {
+        let energy = |level: u8| {
+            ((f64::from(level) / 7.0) * (f64::from(column.height) / 31.0) * 255.0).round() as u8
+        };
+        let (low, mid, high) = (energy(column.low), energy(column.mid), energy(column.high));
+        // Two bytes the format analysis calls "somehow encodes the whiteness".
+        // A column with energy in every band is the white one, so the smallest
+        // of the three is written into both.
+        let whiteness = low.min(mid).min(high);
+        content.extend_from_slice(&[
+            whiteness,
+            whiteness,
+            low.saturating_add(mid / 2), // energy below 10 kHz
+            low,
+            mid,
+            high,
+        ]);
+    }
+
+    let mut body = Vec::with_capacity(12 + content.len());
+    body.extend_from_slice(&6u32.to_be_bytes()); // bytes per column
+    body.extend_from_slice(&(columns.len() as u32).to_be_bytes());
+    body.extend_from_slice(&0u32.to_be_bytes());
+    body.extend_from_slice(&content);
+    section(b"PWV4", 0x18, &body)
+}
+
+/// `PWV5`: the colour detail waveform, two bytes per column.
+///
+/// Sixteen bits packed from the low end up: three each of red, green and blue,
+/// then five of height and two of sub-step. Red is the top of the spectrum and
+/// blue the bottom, which is the way every player draws it.
+fn colour_waveform_detail(track: &Track) -> Vec<u8> {
+    let mut content = Vec::with_capacity(track.detail.len() * 2);
+    for column in track.detail.columns() {
+        let packed: u16 = u16::from(column.high & 0x07)
+            | (u16::from(column.mid & 0x07) << 3)
+            | (u16::from(column.low & 0x07) << 6)
+            | (u16::from(column.height & 0x1f) << 9);
+        content.extend_from_slice(&[packed as u8, (packed >> 8) as u8]);
+    }
+
+    let mut body = Vec::with_capacity(12 + content.len());
+    body.extend_from_slice(&2u32.to_be_bytes()); // bytes per column
+    body.extend_from_slice(&(track.detail.len() as u32).to_be_bytes());
+    body.extend_from_slice(&0u32.to_be_bytes());
+    body.extend_from_slice(&content);
+    section(b"PWV5", 0x18, &body)
 }

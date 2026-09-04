@@ -5,7 +5,21 @@ use collection::{Beat, Cue, CueKind, Format, Track};
 use rekordcrate::anlz::ANLZ;
 use std::io::Cursor;
 use std::path::PathBuf;
-use waveform::Waveform;
+use waveform::{Column, Waveform};
+
+/// A waveform whose columns rise and fall, so a reader can tell one column from
+/// the next.
+fn flat_waveform(columns_per_second: f64, count: usize) -> Waveform {
+    let columns: Vec<Column> = (0..count)
+        .map(|index| Column {
+            height: (index % 32) as u8,
+            low: (index % 8) as u8,
+            mid: ((index / 2) % 8) as u8,
+            high: ((index / 4) % 8) as u8,
+        })
+        .collect();
+    Waveform::from_columns(columns_per_second, &columns)
+}
 
 fn track() -> Track {
     let bpm = 138.0;
@@ -41,14 +55,8 @@ fn track() -> Track {
             number: 1,
             comment: String::new(),
         }],
-        preview: Waveform {
-            columns_per_second: 0.9,
-            columns: (0..400).map(|i| (i % 32) as u8).collect(),
-        },
-        detail: Waveform {
-            columns_per_second: 150.0,
-            columns: (0..66_750).map(|i| (i % 32) as u8).collect(),
-        },
+        preview: flat_waveform(0.9, 1200),
+        detail: flat_waveform(150.0, 66_750),
     }
 }
 
@@ -89,9 +97,57 @@ fn the_dat_file_carries_the_grid_the_cues_and_the_previews() {
 }
 
 #[test]
-fn the_ext_file_carries_the_scrolling_waveform() {
+fn the_ext_file_carries_the_scrolling_and_colour_waveforms() {
     let bytes = rekordbox::anlz::ext(&track());
-    assert_eq!(sections(&bytes), vec!["Path", "WaveformDetail"]);
+    assert_eq!(
+        sections(&bytes),
+        vec![
+            "Path",
+            "WaveformDetail",
+            "WaveformColorPreview",
+            "WaveformColorDetail"
+        ]
+    );
+}
+
+#[test]
+fn the_colour_detail_waveform_decodes_to_the_columns_it_was_given() {
+    let track = track();
+    let parsed = ANLZ::read(&mut Cursor::new(rekordbox::anlz::ext(&track))).unwrap();
+    let printed = format!("{parsed:?}");
+
+    // The first three columns of the fixture, as the writer packs them.
+    let expected: Vec<String> = track
+        .detail
+        .columns()
+        .take(3)
+        .map(|column| {
+            format!(
+                "red: {}, green: {}, blue: {}, height: {}",
+                column.high, column.mid, column.low, column.height
+            )
+        })
+        .collect();
+    for column in expected {
+        assert!(
+            printed.contains(&column),
+            "the parser did not read back a column written as {column}"
+        );
+    }
+}
+
+#[test]
+fn the_colour_preview_is_the_width_the_format_reads() {
+    let bytes = rekordbox::anlz::ext(&track());
+    let parsed = ANLZ::read(&mut Cursor::new(&bytes[..])).unwrap();
+    let preview = parsed
+        .sections
+        .iter()
+        .find(|section| format!("{:?}", section.header.kind) == "WaveformColorPreview")
+        .expect("a colour preview section");
+    // Six bytes per column over 1200 columns, plus the twelve of header the
+    // section declares beyond the twelve every section has.
+    assert_eq!(preview.header.total_size, 24 + 1200 * 6);
 }
 
 #[test]

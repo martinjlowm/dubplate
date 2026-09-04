@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 collection.workspace = true
+waveform.workspace = true
 
 [dev-dependencies]
 # The oracle. Not a dependency: its row types cannot be constructed from outside
@@ -23,4 +24,3 @@ rekordcrate = { git = "https://github.com/Holzhaus/rekordcrate", rev = "41f790b2
 # trait this test calls.
 binrw = "0.15"
 fallible-iterator = "0.3"
-waveform.workspace = true
