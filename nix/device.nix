@@ -65,7 +65,13 @@ in {
   in
     runCommand "${name}.img" {
       nativeBuildInputs = [dosfstools mtools];
-      passthru = {inherit tree;};
+      # `tree` is the databases on their own, which is worth reading when a
+      # player refuses a stick; `imageFile` is the name inside this output, so
+      # a caller can link to the image without knowing how it was named.
+      passthru = {
+        inherit tree;
+        imageFile = "${name}.img";
+      };
       # mtools refuses a disk image whose geometry it cannot recognise, which is
       # every image that was never a real disk.
       MTOOLS_SKIP_CHECK = "1";
@@ -99,5 +105,23 @@ in {
       mkdir -p "$out"
       cp image.img "$out/${name}.img"
       ln -s "${tree}" "$out/device"
+    '';
+
+  # Every image side by side, each still reachable on its own.
+  #
+  # A derivation rather than a plain attribute set, so that
+  # `devenv build outputs.usb` gives one directory holding all three and
+  # `devenv build outputs.usb.flac` gives that one image. The variants hang off
+  # passthru, which is how a Nix attribute path reaches into a derivation.
+  imageSet = {
+    name ? "usb-images",
+    images,
+  }:
+    runCommand name {passthru = images;} ''
+      mkdir -p "$out"
+      ${lib.concatStringsSep "\n" (lib.mapAttrsToList (format: image: ''
+          ln -s "${image}/${image.imageFile}" "$out/${format}.img"
+        '')
+        images)}
     '';
 }

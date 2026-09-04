@@ -17,9 +17,9 @@ rename +ARGS:
 library:
     devenv build outputs.library
 
-# Build a FAT32 USB image for one format: just usb flac
-usb FORMAT:
-    devenv build outputs.usb-{{FORMAT}}
+# Build FAT32 USB images: just usb (all three) or just usb flac (one)
+usb FORMAT="":
+    devenv build outputs.usb{{ if FORMAT == "" { "" } else { "." + FORMAT } }}
 
 # Write a device tree from analysed tracks: just export <dir> --audio A --reports R
 export OUT +ARGS:

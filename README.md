@@ -211,22 +211,29 @@ just library
 ```
 
 Each track inside each archive becomes its own derivation, so Nix analyses as many at once as
-it builds anything else, and one bad file fails one track rather than the batch. The result
-has three outputs:
+it builds anything else, and one bad file fails one track rather than the batch. The outputs
+nest, so you can take the lot or one format of it:
 
 ```sh
-devenv build outputs.library    # wav/ flac/ mp3/ side by side
-devenv build outputs.flac       # one format, for copying to a player
+devenv build outputs.library         # wav/ flac/ mp3/ side by side
+devenv build outputs.library.flac    # one format, for copying to a player
 ```
 
-A WAV lands in all three, encoded to FLAC and to MP3 on the way. A FLAC or an MP3 lands in its
-own directory only, because transcoding a lossy source spends CPU to lose more. Loose files
-work too: put them in `audio/` instead of zipping them.
+```
+outputs.library        every track named <BPM>_<KEY>_<original name>, three formats side by side
+outputs.library.flac   that one format;  .analysis holds the reports
+outputs.usb            a FAT32 image per format, side by side
+outputs.usb.flac       that one image
+```
+
+A WAV lands in all three formats, encoded to FLAC and to MP3 on the way. A FLAC or an MP3
+lands in its own directory only, because transcoding a lossy source spends CPU to lose more.
+Loose files work too: put them in `audio/` instead of zipping them.
 
 ### Build a USB stick for a CDJ
 
 ```sh
-just usb flac                   # or wav, or mp3
+just usb flac                   # or wav, or mp3, or `just usb` for all three
 ```
 
 That analyses every track in `archives/` and `audio/`, names each one after its tempo and
@@ -299,7 +306,7 @@ manifest, so adding a crate does not mean editing `Cargo.toml`.
 | `just analyze <file> [flags]` | Analyse a file and write a report directory. |
 | `just rename <path>...` | Print, link or copy files named after what was measured in them. |
 | `just library` | Build every archive in `archives/` into `wav/`, `flac/` and `mp3/`. |
-| `just usb <format>` | Build a FAT32 image for that format, database and all. |
+| `just usb [format]` | Build FAT32 images, all three or one, databases and all. |
 | `just export <dir>` | Write a device tree from a directory of audio and reports. |
 | `just selftest [--bpm N]` | Measure a generated pulse train end to end. |
 | `just test` / `lint` / `fmt` | `cargo test` / clippy with warnings fatal / `treefmt`. |

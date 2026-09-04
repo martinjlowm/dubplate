@@ -61,8 +61,8 @@
     inherit music-analyze;
   };
 
-  # One USB image per format, each carrying that format's files and a database
-  # built from the same analysis.
+  # One USB image per format, each carrying that format's files and both
+  # databases built from the same analysis.
   imageFor = format:
     device.image {
       name = "usb-${format}";
@@ -70,6 +70,14 @@
       inherit (library) analysis;
       label = "MUSIC";
     };
+
+  usb = device.imageSet {
+    images = {
+      wav = imageFor "wav";
+      flac = imageFor "flac";
+      mp3 = imageFor "mp3";
+    };
+  };
 in {
   packages = [
     toolchain
@@ -117,26 +125,17 @@ in {
   # `devenv build outputs.music-analyze` builds the CLI through the crate graph
   # rather than through the local cargo cache, which is what CI checks and what
   # anyone with Nix can reproduce.
+  # Both trees nest the same way: build the whole thing, or one format of it.
+  #
+  #   outputs.library         every track named <BPM>_<KEY>_<original name>,
+  #                           the three formats side by side
+  #   outputs.library.flac    that one format, and .analysis for the reports
+  #   outputs.usb             a FAT32 image per format, side by side
+  #   outputs.usb.flac        that one image, to copy to a stick with dd
+  #
+  # library is one derivation with several outputs; usb is three derivations
+  # behind one, since each image is built from different audio.
   outputs = {
-    inherit music-analyze;
-
-    # Every track from every archive, analysed and named
-    # <BPM>_<KEY>_<original name>. Both numbers are zero padded, so a plain
-    # listing sorts by tempo and then around the Camelot wheel.
-    #
-    # `devenv build outputs.library` gives all three formats side by side;
-    # outputs.wav, outputs.flac and outputs.mp3 are the same build, one format
-    # each, for copying somewhere.
-    inherit library;
-    wav = library.wav;
-    flac = library.flac;
-    mp3 = library.mp3;
-
-    # A FAT32 image per format, each with PIONEER/ built from the same
-    # measurements: `devenv build outputs.usb-flac` writes an image to copy to
-    # a stick with dd.
-    usb-wav = imageFor "wav";
-    usb-flac = imageFor "flac";
-    usb-mp3 = imageFor "mp3";
+    inherit music-analyze library usb;
   };
 }

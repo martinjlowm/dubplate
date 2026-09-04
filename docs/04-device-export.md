@@ -139,8 +139,10 @@ are marked as such in `rows.rs`, `anlz.rs` and `blob.rs`.
 
 ## Images
 
-`devenv build outputs.usb-flac` (or `usb-wav`, `usb-mp3`) writes a FAT32 image
-holding that format's files and a database built from the same analysis.
+`devenv build outputs.usb` writes a FAT32 image per format, each holding that
+format's files and both databases built from the same analysis.
+`devenv build outputs.usb.flac` writes just that one, and the same nesting holds
+for `outputs.library`.
 
 | Property | Value |
 |---|---|
@@ -153,4 +155,6 @@ Written with `mkfs.vfat` and `mtools`, so no mounting and no root. `fsck.vfat`
 reads the result back at the end of the build.
 
 Copy one to a stick with `dd if=result/usb-flac.img of=/dev/diskN bs=4m`, having
-checked twice which disk that is.
+checked twice which disk that is. The combined output holds `wav.img`,
+`flac.img` and `mp3.img` as links, so the same command works from there with the
+name changed.

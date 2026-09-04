@@ -157,8 +157,11 @@ No em dashes. Sentence case in headings. Name the actor rather than writing in t
 - **crate2nix** resolves the crate graph ahead of time into `Cargo.nix`, which
   `devenv build outputs.music-analyze` reads. Nothing fetches during evaluation.
 - **outputs.library** builds every track in `archives/` and `audio/` into `wav/`, `flac/` and
-  `mp3/`. It lists archive contents through import from derivation, so evaluation builds the
-  manifest before it knows what the tracks are.
+  `mp3/`, and **outputs.usb** builds an image from each. Both nest: `outputs.library.flac` is
+  one output of a multi-output derivation, `outputs.usb.flac` is one derivation hanging off
+  another's passthru. Adding a variant means adding it in one place, not three. The library
+  lists archive contents through import from derivation, so evaluation builds the manifest
+  before it knows what the tracks are.
 - **treefmt** formats Rust and Nix from one definition in `treefmt.nix`, used by the shell,
   the git hook and CI.
 
