@@ -83,6 +83,12 @@ in {
     toolchain
     crate2nix
     pkgs.just
+    # The GitHub Actions workflows are generated from infrastructure/ci-cd by
+    # cdkactions, which is a TypeScript library, so a Rust repository carries a
+    # JavaScript runtime for that one job. Bun rather than node plus a package
+    # manager: there are two dependencies, both public, and it runs the
+    # definition directly.
+    pkgs.bun
   ];
 
   # `treefmt` on PATH in the shell. The formatter set lives in ./treefmt.nix and

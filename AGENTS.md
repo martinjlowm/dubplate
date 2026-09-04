@@ -30,6 +30,8 @@ is the wrong trade.
   the check.
 - `nix/library.nix` the archive pipeline: one derivation per track, three format outputs.
 - `nix/device.nix` the device tree and the FAT32 image built from it.
+- `infrastructure/ci-cd` the CI workflows as a cdkactions app; `.github/workflows` is its
+  output.
 
 A crate's home follows from its role. Reusable stages go in `libraries/rust/`, things you run
 go in `tools/rust/`. Both are globs in the workspace manifest, so adding a crate needs no
@@ -167,6 +169,10 @@ No em dashes. Sentence case in headings. Name the actor rather than writing in t
   before it knows what the tracks are.
 - **treefmt** formats Rust and Nix from one definition in `treefmt.nix`, used by the shell,
   the git hook and CI.
+- **cdkactions** generates `.github/workflows/*.yaml` from `infrastructure/ci-cd/main.ts`.
+  Never edit the YAML: it carries a "Do not modify" header, `just synth-workflows`
+  regenerates it, and both `just check` and a CI job fail on any difference. Bun runs it,
+  which is the only reason this repository has a JavaScript runtime.
 
 ## 7. Git and pull requests
 

@@ -24,6 +24,9 @@ result-*
 *.zip
 /analysis/
 
+# The cdkactions app's dependencies. bun.lock is committed, the tree is not.
+node_modules/
+
 # OS
 .DS_Store
 

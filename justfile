@@ -55,6 +55,14 @@ fmt:
 fmt-check:
     treefmt --fail-on-change
 
+# Regenerate .github/workflows from infrastructure/ci-cd/main.ts (cdkactions)
+synth-workflows:
+    cd infrastructure/ci-cd && bun install --frozen-lockfile && bun main.ts
+
+# Fail if the committed workflows are not what that definition synthesises
+check-workflows: synth-workflows
+    git diff --exit-code -- .github/workflows/
+
 # Regenerate the crate graph after a dependency change
 sync-cargo-nix:
     crate2nix generate -h .crate-hashes.json
@@ -68,4 +76,4 @@ build-nix:
     devenv build outputs.music-analyze
 
 # All PR gates
-check: fmt-check lint test check-cargo-nix
+check: fmt-check lint test check-cargo-nix check-workflows

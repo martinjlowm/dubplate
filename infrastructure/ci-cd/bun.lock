@@ -1,0 +1,24 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "@factbird/music-analyze-ci-cd",
+      "dependencies": {
+        "@factbird/cdkactions": "^2.1.2",
+        "constructs": "^10.3.0",
+      },
+    },
+  },
+  "packages": {
+    "@factbird/cdkactions": ["@factbird/cdkactions@2.1.2", "", { "dependencies": { "js-yaml": "^4.0.0", "ts-dedent": "^2.2.0" }, "peerDependencies": { "constructs": "^10.4.2" } }, "sha512-EratRtZZIzkhMW1yZb66w2ewnnsnnAv0+fnfobP7+jdgw6YaNlCx9rXcb0bwYuaSLxeQujYOtF17nFSRtv4NYQ=="],
+
+    "argparse": ["argparse@2.0.1", "", {}, "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=="],
+
+    "constructs": ["constructs@10.8.1", "", {}, "sha512-98yGXYyhePqPYh3cYu8nzBERmAhC0DONe3UD03okK0nehZ7hYP4wgZuf02a04+uOWxnTJ5Rpp5m0GRNpwyLGGA=="],
+
+    "js-yaml": ["js-yaml@4.3.2", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA=="],
+
+    "ts-dedent": ["ts-dedent@2.3.0", "", {}, "sha512-JfJeIHke7y2egdGGgRAvpCwYFUsHlM2gPcrVOxFkznt/4uzQ7HFmvE63iFHVLBJNDuyDOQgijDK/tXH/f6Msjg=="],
+  }
+}
