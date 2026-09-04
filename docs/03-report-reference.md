@@ -92,7 +92,7 @@ Every `analyze` flag from the transform, onset and tempo tables applies to `self
 | File | Contents |
 |---|---|
 | `report.json` | Everything below. The source of every other file. |
-| `report.html` | Headline, findings, four tables, seven figures. No script, no external asset. |
+| `report.html` | Headline, findings, five tables, seven figures. No script, no external asset. |
 | `spectrogram.png` | 1600 columns at most, 440 log-spaced rows from 20 Hz, 80 dB of range. |
 | `spectrogram.svg` | Axes around the PNG, which it references by name. |
 | `spectrum.svg` | Long-term average spectrum, log frequency axis. |
