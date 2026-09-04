@@ -106,6 +106,28 @@ What decides the metrical level instead is one stated rule: double the answer un
 convention about how dance music is counted, not a measurement, and the report says every time
 it fires.
 
+### From a measurement to a tempo
+
+The interpolated peak is a real number and the tempo of a produced track is not. Somebody
+typed 126 into a sequencer, so a measurement of 126.02 is a measurement of 126 whose last two
+digits belong to this tool rather than to the track. The reported tempo is therefore the
+nearest whole number, provided it is within `--integer-snap` of what was measured, and
+`bpm_measured` keeps the measurement.
+
+The default tolerance is a quarter of a BPM. That is wider than the 0.1 BPM candidate grid and
+wider than the 0.065 BPM by which the selftest misses a generated pulse train at 200 BPM, so
+it closes this tool's error. It is much narrower than half a BPM, which would round everything
+and would move the grid of a track that really does sit between two integers, a played set or
+a tape rip, by enough to drift a beat every couple of minutes. Those keep their measurement
+and raise `non-integer-tempo`.
+
+The snap happens before the grid is fitted, so the grid, the file name and both device
+databases state one number. Across the seventeen-track working set it moved every answer onto
+an integer by at most 0.164 BPM, and the grid fit improved on eleven tracks, held on three and
+lost a point or two on three: the largest gain took a 125 BPM deep house track from 88% of
+beats matched to 100%, and its grid from twice the track novelty to six and a half times it.
+Tracks are written on integers, and a grid fitted to one is measurably the better grid.
+
 ### The grid
 
 Only the phase is searched, at a tenth of a frame. The tempo is an input, because searching

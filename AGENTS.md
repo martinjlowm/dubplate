@@ -39,9 +39,13 @@ edit to `Cargo.toml`.
 
 ## 2. Non-negotiable constraints (load-bearing, do not simplify away)
 
-1. **No stage silently corrects another.** The metrical floor is the only rule that changes
-   the reported number, and it emits `metrical-floor-applied` with both saliences every time
-   it fires. A detector that quietly fixes itself is what this tool exists to troubleshoot.
+1. **No stage silently corrects another.** Two rules change the reported number and both say
+   so. The metrical floor emits `metrical-floor-applied` with both saliences every time it
+   fires. The snap to a whole number keeps the measurement in `tempo.bpm_measured` and prints
+   it on the headline whenever it moved the answer, and refuses to move it further than
+   `--integer-snap`, which raises `non-integer-tempo` instead. A third such rule needs the
+   same treatment or it does not go in: a detector that quietly fixes itself is what this
+   tool exists to troubleshoot.
 2. **Diagnostics never change the answer.** They read what the stage already produced. A rule
    that adjusts a result is not a diagnostic.
 3. **No tempo prior by default.** A prior improves the average case and is exactly how a
@@ -104,10 +108,22 @@ just selftest --bpm 100    # and 128, 145, 174, 200
 for f in *.wav; do just analyze "$f" --no-figures -o /tmp/sweep; done
 ```
 
-The selftest error stays under 0.5% at every tempo. In the sweep, look at whether answers
-still land near whole numbers, since produced electronic music is written at integer tempi and
-a drift away from them is the signal that something regressed. Say in the pull request what
-moved.
+The selftest error stays under 0.5% at every tempo, and it reads `bpm_measured`, so a rounded
+answer cannot hide a regression from it.
+
+In the sweep, read `bpm_measured` rather than `bpm`: the reported tempo is snapped to a whole
+number and would look right while the measurement behind it drifted. Produced electronic music
+is written at integer tempi, so the number that matters is the gap between the measurement and
+its nearest integer. Across the working set that gap is at most 0.164 BPM, at 200 BPM. A change
+that widens it, or that makes `non-integer-tempo` fire on a track that used to snap, is a
+regression whatever the headline says:
+
+```sh
+for f in *.wav; do just analyze "$f" --no-figures -o /tmp/sweep/"${f%.wav}"; done
+jq -r '[.tempo.bpm_measured, (.tempo.bpm - .tempo.bpm_measured)] | @tsv' /tmp/sweep/*/report.json
+```
+
+Say in the pull request what moved.
 
 ## 4. Out of scope
 

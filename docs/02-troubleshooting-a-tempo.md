@@ -23,8 +23,8 @@ jq '.tempo.octave_relatives' analysis/*/report.json
 Look for `metrical-floor-applied` in the findings. It reports both saliences:
 
 ```
-the strongest candidate was 68.97 BPM (salience 0.882); the answer was doubled to
-137.99 BPM (salience 0.835) to clear the metrical floor
+the strongest candidate was 63.02 BPM (salience 0.887); the answer was doubled to
+126.02 BPM (salience 0.854) to clear the metrical floor
 ```
 
 The rule is a convention about how music is counted, not a measurement. Undo it with
@@ -38,7 +38,8 @@ This is the step that settles octaves. Salience ranks candidates within one run 
 compared across runs. Grid fit can.
 
 ```sh
-just analyze track.wav --min-bpm 155 --max-bpm 165
+just analyze track.wav --min-bpm 80 --max-bpm 88     # a competing level inside a range
+just analyze track.wav --metrical-floor 0            # the level the floor rejected
 ```
 
 Compare against the original run:
@@ -49,11 +50,21 @@ Compare against the original run:
 | `tempo.grid.matched_fraction` | beats with an onset within 50 ms | higher |
 | `tempo.stability.agreeing_fraction` | windows within 1% of the answer | higher |
 
-The pulse ratio is the one that separates metrical levels, and the order of that table is the
-order to read it in. The other two stay high at a related level: a 92 BPM grid against a
-138 BPM track matches 91% of its beats, because half of them fall on beats of the real grid
-and the rest on offbeats that carry weight, and every window agrees with it because it is
-consistently wrong. The pulse ratio halves, from 4.98 to 2.26.
+The pulse ratio separates a two-thirds or three-halves relative cleanly. On a 126 BPM track,
+forcing 84 gives 83% of beats matched at a ratio of 5.72, against 92% at 8.27 for the answer:
+two beats in three of an 84 BPM grid land on a real beat and the third lands on nothing.
+
+It does not separate a half or a double at all, and it is worth knowing which way it fails.
+Forcing 63 BPM on that same track matches the same 92% of beats at a ratio of 8.81, higher
+than the answer's, because every beat of a 63 BPM grid is a beat of the 126 one and half as
+many beats are being asked to find an onset. Reading the ratio alone would pick the wrong
+level.
+
+Two other numbers decide a half. The window trace collapses: at 126 BPM the twenty-second
+estimates spread over 0.01 BPM with 88% agreeing, at 63 they spread over 63 BPM with 74%
+agreeing, which is one track being measured as two different things depending on the window.
+And `tempo.candidates[].fourier_salience` gives 126 BPM 1.000 against 0.178 for 63, because it
+measures energy at a beat frequency and the track carries none at 63.
 
 A split verdict, where one level wins the ratio and another wins the agreement, usually means
 the track has two sections at different feels. Step 6 covers that.
@@ -126,7 +137,46 @@ where the second eighth of each beat arrives late. The Fourier tempogram is the 
 by drift, since it measures energy at a frequency and a drifting tempo has none. Whichever
 explanation matches what you hear tells you which line to believe.
 
-## 8. When nothing above resolves it
+## 8. Is the answer a whole number, and should it be?
+
+The headline is a whole number and `bpm_measured` is what was measured. When the two differ,
+the headline says by how much:
+
+```
+126 BPM   5A   5:55 analysed
+  measured  126.02 BPM, snapped -0.02 BPM to a whole number
+```
+
+A snap of a few hundredths is this tool's own error being closed, and there is nothing to
+check. A snap near the tolerance, above roughly 0.15 BPM, is worth a look at
+`tempo-over-time.svg`: a track whose windows sit either side of an integer is being measured
+well, and one whose windows drift across the track was rounded to a number it only passes
+through.
+
+`non-integer-tempo` is the opposite case. The measurement was too far from any integer to
+snap, so it stands as the answer:
+
+This is `just selftest --bpm 127.5`, a pulse train generated exactly half way between two
+integers, which is the one place the finding can be produced on demand:
+
+```
+generated 127.50 BPM, measured 127.50 BPM, error 0.002 BPM (0.00%)
+  non-integer-tempo 127.50 BPM sits 0.50 BPM from the nearest whole number, further than the
+  0.25 BPM the snap allows, so the measurement is the answer
+```
+
+Produced music is written on integers, so that means one of three things. The track was
+played rather than rendered, and a DJ set or a live recording has no single tempo to find.
+The file is a rip whose speed is off, which `--integer-snap 0.5` will round for you if you
+want the nominal tempo. Or the grid genuinely drifts, which step 6 is how you tell.
+
+To see the measurement everywhere instead of the rounded answer, turn the snap off:
+
+```sh
+just analyze track.wav --integer-snap 0
+```
+
+## 9. When nothing above resolves it
 
 Cut to twenty seconds you are certain about and run that alone:
 

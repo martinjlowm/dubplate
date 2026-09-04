@@ -7,7 +7,7 @@ why the writer exists at all, see the README explanation.
 ## Device layout
 
 ```
-/Contents/138_03A_Artist-Title.flac          the audio, named by what was measured in it
+/Contents/126_05A_Artist-Title.flac          the audio, named by what was measured in it
 /PIONEER/rekordbox/export.pdb                the database a Pioneer player browses
 /PIONEER/USBANLZ/P000/00000001/ANLZ0000.DAT  beat grid, cues, monochrome waveforms
 /PIONEER/USBANLZ/P000/00000001/ANLZ0000.EXT  the scrolling and colour waveforms
@@ -38,8 +38,8 @@ running by hand.
 | `--playlist <NAME>` | `All tracks` | Name of the playlist holding every track. |
 | `--date <YYYY-MM-DD>` | `SOURCE_DATE_EPOCH`, else today | Written as each track's added and analysed date. |
 
-Audio and reports are paired by stem: `138_03A_Artist-Title.flac` with
-`138_03A_Artist-Title.json`. A file with no report is skipped, with a line on
+Audio and reports are paired by stem: `126_05A_Artist-Title.flac` with
+`126_05A_Artist-Title.json`. A file with no report is skipped, with a line on
 stderr saying so. It is not exported with an empty beat grid, which would look
 analysed on the player and be wrong.
 
@@ -47,7 +47,7 @@ analysed on the player and be wrong.
 
 | Database field | Source |
 |---|---|
-| tempo | `tempo.bpm`, in centi-BPM |
+| tempo | `tempo.bpm`, in centi-BPM. A whole number, so a CDJ shows 126.00 rather than 126.02 |
 | key | `key.name`, shared by every track in that key |
 | duration | `source.duration_seconds`, rounded |
 | sample rate, bit depth | `source.sample_rate`, 16 |
@@ -72,7 +72,7 @@ is not written.
 
 | Column or blob | Source |
 |---|---|
-| `bpmAnalyzed`, `bpm` | `tempo.bpm`, exact and rounded |
+| `bpmAnalyzed`, `bpm` | `tempo.bpm` as a real and as an integer. Both carry the reported whole number; `tempo.bpm_measured` is not exported, since a player uses the tempo to beat match rather than to audit the analysis |
 | `key` | the Camelot key as Engine numbers it, 0 for 8B through 23 for 7A |
 | `length` | duration in whole seconds |
 | `path` | `../Contents/<file>`, relative to the Engine Library directory |

@@ -23,24 +23,26 @@ network.
 
 ## What a run gives you
 
-One command on one track writes the page below. The track is one whose octave is arguable, so
-the page has something to argue.
+One command on one track writes the page below. The track is a 126 BPM trance remix whose
+metrical level is arguable, so the page has something to argue.
 
 ```sh
-just analyze "Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav"
+just analyze "Lange,_Sarah_Howells-Out_Of_The_Sky_(Maratone_Extended_Remix).wav"
 ```
 
-![The top of report.html, showing 137.99 BPM and 3A, three findings, and the ranked tempo candidates with their saliences](docs/images/report-headline.jpg)
+![The top of report.html, showing 126 BPM against a measurement of 126.02, the key 5A, the metrical-floor finding, and the tempo candidate and octave relative tables with their saliences](docs/images/report-headline.jpg)
 
 The headline is the claim and the rest of the page is what backs it. The findings are the tool
 disagreeing with itself, which no player's GUI will tell you, and the candidate table is the
-ranking the answer came out of. 68.97 BPM scored highest on this track. The tool reports
-137.99 BPM because the metrical floor doubled it, it prints both saliences so you can see what
-that cost, and the Fourier column shows the second estimator putting its whole weight on 138.
+ranking the answer came out of. Read that table before anything else here: 63.02 BPM scored
+highest, at 0.886 against 0.854 for 126. The answer is 126 because the metrical floor doubled
+the winner and the snap closed the last two hundredths, both saliences are printed so you can
+see what the doubling cost, and the Fourier column is what says the floor was right, giving
+126 a score of 1.000 and 63 a sixth of that.
 
 ### The grid drawn over the onsets
 
-![Six seconds of the onset novelty curve with the 137.99 BPM beat grid drawn over it](docs/images/novelty.svg)
+![Six seconds of the onset novelty curve with the 126 BPM beat grid drawn over it](docs/images/novelty.svg)
 
 Six seconds of the curve every tempo number comes from, with the fitted grid over it.
 Lines on the peaks mean the tempo is right, lines drifting off them across the window mean it
@@ -51,19 +53,20 @@ of the track.
 
 ![Tempo salience from both estimators across the BPM range, with the competing candidates marked](docs/images/tempo-salience.svg)
 
-Autocorrelation peaks at 69 BPM and the Fourier tempogram peaks at 138. The marked candidates
-are the tempi an octave error lands on, which is the picture behind the `octave-ambiguity`
-finding and the reason the report ranks 69, 79, 92 and 184 beside the winner rather than
-printing one number.
+Autocorrelation peaks at 63 BPM and the Fourier tempogram peaks at 126. This is the picture
+behind the one finding on the page: the comb ranked half the tempo first, because every one of
+its teeth still lands on a beat, and the Fourier tempogram has no energy to give it. The
+marked candidates are the tempi an octave error lands on, which is why the report ranks 63, 84,
+101 and 168 beside the winner rather than printing one number.
 
 ### The key and the margin behind it
 
 ![The eight best-scoring keys in Camelot notation, ranked by correlation](docs/images/key-correlations.svg)
 
-3A wins on 0.738 with 2A next at 0.617, and that gap is the margin the report prints beside
-the answer. Two bars of nearly equal height would be a tie the correlation cannot break, and
-the pair in that case is usually a key and its relative, which share every note and share a
-number on the wheel.
+5A wins on 0.725 with 6A next at 0.636, a margin of 0.12 that the report prints beside the
+answer. Two bars of nearly equal height would be a tie the correlation cannot break, and the
+pair in that case is usually a key and its relative, which share every note and share a number
+on the wheel.
 
 The page holds seven figures, five tables and every finding, and each figure carries a caption
 saying what it would look like if the stage above it had gone wrong. `report.json` behind it
@@ -90,7 +93,7 @@ too, holding:
 
 | On the image | For |
 |---|---|
-| `/Contents/138_03A_Artist-Title.flac` | The audio, named after its own tempo and key, zero padded so a plain listing sorts by tempo and then around the wheel. |
+| `/Contents/126_05A_Artist-Title.flac` | The audio, named after its own tempo and key, zero padded so a plain listing sorts by tempo and then around the wheel. |
 | `/PIONEER/rekordbox/export.pdb` | **Pioneer.** The DeviceSQL database a CDJ, XDJ or RX3 browses: tracks, artists, keys, one playlist. |
 | `/PIONEER/USBANLZ/…/ANLZ0000.DAT` and `.EXT` | **Pioneer.** Per track: the beat grid, the cue, the monochrome waveforms and the colour pair a Nexus 2 or newer draws. |
 | `/Engine Library/Database2/m.db` | **Denon.** Engine schema 2.21.2, which Engine DJ 2 and 3 read: tempo, key, beat grid, cue slots, overview waveform. |
@@ -142,26 +145,28 @@ WAV file.
 3. **Analyse a track.**
 
    ```sh
-   just analyze "Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav"
+   just analyze "Lange,_Sarah_Howells-Out_Of_The_Sky_(Maratone_Extended_Remix).wav"
    ```
 
    ```
-   137.99 BPM   3A   7:03 analysed
-     grid      99% of beats within 50 ms, pulse 4.98x the mean, bar phase 1 (contrast 1.60)
-     windows   median 137.99 BPM, spread 0.01 BPM, 98% agree
-     also      68.97 (0.88), 91.98 (0.73), 184.14 (0.44)
-     ! octave-ambiguity: 91.99 BPM (two-thirds) scores 87% of 137.99 BPM, so the octave is
-       decided by a margin too small to defend
-     - metrical-floor-applied: the strongest candidate was 68.97 BPM (salience 0.882); the
-       answer was doubled to 137.99 BPM (salience 0.835) to clear the metrical floor
-     - tuning-offset: the track sits -16 cents from A = 440 Hz and the chroma mapping was
-       shifted to match; an uncompensated estimator reads this track differently
-     wrote     analysis/Ferry_Corsten,_Kosheen-Catch_(Extended_Mix)/report.html
+   126 BPM   5A   5:55 analysed
+     measured  126.02 BPM, snapped -0.02 BPM to a whole number
+     grid      92% of beats within 50 ms, pulse 8.27x the mean, bar phase 1 (contrast 1.47)
+     windows   median 126.02 BPM, spread 0.01 BPM, 88% agree
+     also      63.02 (0.89), 83.99 (0.52), 167.96 (0.42)
+     - metrical-floor-applied: the strongest candidate was 63.02 BPM (salience 0.887); the
+       answer was doubled to 126.02 BPM (salience 0.854) to clear the metrical floor
+     wrote     analysis/Lange,_Sarah_Howells-Out_Of_The_Sky_(Maratone_Extended_Remix)/report.html
    ```
 
-   Read that second line first. 99% of beats landed within 50 ms of an onset and the grid sits
-   on novelty five times the track mean, so 138 is not a guess. The `!` line is the tool
-   disagreeing with itself, and step 5 is where you settle it.
+   The answer is 126, because somebody typed 126 into a sequencer and the two hundredths the
+   estimator produced are its own error. The second line says how far it had to move, and the
+   grid was fitted at 126 rather than at the measurement.
+
+   Read the grid line next. 92% of beats landed within 50 ms of an onset and the grid sits on
+   novelty eight times the track mean, so 126 describes this track. The `-` line is the tool
+   telling you the number it reported is not the number that won, and step 5 is where you
+   check it.
 
 4. **Open the report.**
 
@@ -173,52 +178,53 @@ WAV file.
    wrong. Start with the novelty plot. Grid lines sitting on the peaks mean the tempo is
    right; lines drifting off them across the window mean it is close and wrong.
 
-5. **Settle the ambiguity yourself.** The warning says 91.99 BPM scores 87% of the winner.
-   Force it and compare the grid fits:
+5. **Check the level the floor rejected.** The finding says 63.02 BPM scored higher than the
+   answer. Report it and compare the two runs:
 
    ```sh
-   just analyze "Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav" --min-bpm 88 --max-bpm 96
+   just analyze "Lange,_Sarah_Howells-Out_Of_The_Sky_(Maratone_Extended_Remix).wav" --metrical-floor 0
    ```
 
    ```
-   91.98 BPM   3A   7:03 analysed
-     grid      91% of beats within 50 ms, pulse 2.26x the mean, bar phase 1 (contrast 2.48)
+   63 BPM   5A   5:55 analysed
+     measured  63.02 BPM, snapped -0.02 BPM to a whole number
+     grid      92% of beats within 50 ms, pulse 8.81x the mean, bar phase 1 (contrast 1.41)
+     windows   median 63.00 BPM, spread 63.00 BPM, 74% agree
    ```
 
-   91% of beats still land on an onset, because 92 and 138 are a two-to-three relation and
-   half of a 92 BPM grid falls on beats of the 138 one. The number that separates them is the
-   pulse ratio: 4.98 against 2.26. The 138 grid sits on novelty five times the track mean, the
-   92 grid on barely twice it. 138 stands, and that comparison rather than the salience
-   ranking is what decides an octave.
+   The grid cannot separate these two. Every beat of a 63 BPM grid is a beat of the 126 one,
+   so 92% of them land on an onset either way and the pulse ratio even goes up, because half
+   as many beats are being asked to find one.
 
-6. **See a knob change the answer.** The metrical floor is what turned 68.97 into 137.99.
-   Turn it off:
+   Two other numbers do separate them. The windows line collapses: at 126 the twenty-second
+   estimates spread over 0.01 BPM and 88% agree, at 63 they spread over 63 BPM and 74% agree,
+   which is the same track measured as two different things depending on the window. And the
+   Fourier column of the candidate table gives 126 BPM 1.000 against 0.178 for 63, because it
+   measures energy at a beat frequency and there is none at 63. 126 stands.
 
-   ```sh
-   just analyze "Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav" --metrical-floor 0
-   ```
-
-   The tool now reports 68.97 BPM, which is what the salience curve actually says. Neither run
-   is lying. One of them applies a rule about how dance music is counted, and it says so in
-   the findings.
+6. **See a knob change the answer.** That last run is the knob. The metrical floor is what
+   turned 63 into 126, and turning it off reports what the salience curve actually says.
+   Neither run is lying. One of them applies a rule about how dance music is counted, and it
+   says so in the findings. To see the measurements with no rule applied at all, add
+   `--integer-snap 0` and the headline reads 63.02.
 
 7. **Put it on a stick.** The same analysis, run over a whole library and written where a
    player looks for it:
 
    ```sh
    mkdir -p audio
-   cp "Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav" audio/
+   cp "Lange,_Sarah_Howells-Out_Of_The_Sky_(Maratone_Extended_Remix).wav" audio/
    just usb flac
    ```
 
    Nix analyses each track in its own derivation, using the tool you just ran by hand, and
-   builds a FAT32 image holding `Contents/138_03A_Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).flac`,
+   builds a FAT32 image holding `Contents/126_05A_Lange,_Sarah_Howells-Out_Of_The_Sky_(Maratone_Extended_Remix).flac`,
    a rekordbox database and an Engine Library. Copy it over with `dd` and the deck reads the
    tempo, the key, the grid and the waveform without analysing anything itself.
 
-You now know both loops: read the headline, read the findings, force the competing tempo and
-compare grid fits; then let the pipeline do the same to everything and write the result where
-a player reads it. The [how-to guides](#how-to-guides) cover the rest of the tasks,
+You now know both loops: read the headline, read the findings, report the competing level and
+compare what the two runs measured; then let the pipeline do the same to everything and write
+the result where a player reads it. The [how-to guides](#how-to-guides) cover the rest of the tasks,
 [docs/02-troubleshooting-a-tempo.md](docs/02-troubleshooting-a-tempo.md) is the decision
 procedure keyed on the diagnostic codes, and
 [docs/04-device-export.md](docs/04-device-export.md) says exactly what lands on the stick.
@@ -262,6 +268,26 @@ just analyze track.wav --min-bpm 155 --max-bpm 165
 
 Compare `grid.matched_fraction` and `grid.pulse_ratio` against the original run. Higher on
 both is the right level, whatever the salience curve ranked first.
+
+### See the measurement behind a rounded tempo
+
+The headline is a whole number, because a produced track has the tempo somebody typed in. The
+measurement is in the report and on the second line of the summary whenever the two differ:
+
+```sh
+jq '{reported: .tempo.bpm, measured: .tempo.bpm_measured}' analysis/*/report.json
+```
+
+A gap of a few hundredths is this tool's own error. A gap near the quarter-BPM tolerance is
+worth reading `tempo-over-time.svg` for. To turn the rounding off everywhere, including in the
+grid, the file name and both databases:
+
+```sh
+just analyze track.wav --integer-snap 0
+```
+
+A track measured further from a whole number than the tolerance allows keeps its decimals and
+raises `non-integer-tempo`, which usually means it was played rather than rendered.
 
 ### See what a tempo prior would do
 
@@ -309,11 +335,11 @@ just analyze track.wav --key-profile krumhansl
 key padded to two, then the name the file already had.
 
 ```sh
-just rename "Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav"
+just rename "Lange,_Sarah_Howells-Out_Of_The_Sky_(Maratone_Extended_Remix).wav"
 ```
 
 ```
-138_03A_Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav
+126_05A_Lange,_Sarah_Howells-Out_Of_The_Sky_(Maratone_Extended_Remix).wav
 ```
 
 Padding is the point. A plain `ls` then sorts by tempo and, within a tempo, around the Camelot
@@ -516,6 +542,34 @@ half of the original. Nothing in club music is counted below that; a track that 
 is being counted in half bars. Across the seventeen-track working set this doubling fires four
 times, and every time it does the report carries a `metrical-floor-applied` finding with both
 saliences, so the decision is visible and `--metrical-floor 0` undoes it.
+
+### The answer is a whole number
+
+A produced track has the tempo somebody typed into a sequencer, and nobody types 126.02. So
+the estimator's decimals are the estimator's error, and reporting them states a precision the
+track does not have. The reported tempo is the nearest whole number, `bpm_measured` keeps what
+was measured, and the headline prints the gap whenever it moved the answer.
+
+The snap runs before the grid is fitted rather than at the point of printing, because the file
+name, the beat grid, the rekordbox database and the Engine Library all take the reported
+number, and a grid fitted at 126.02 under an answer of 126 is a grid nobody can check the
+answer against. Fitting at the whole number turns out to fit better: across the working set
+the grid improved on eleven of seventeen tracks, held on three and lost a point or two on
+three. The largest gain took a 125 BPM deep house track from 88% of beats matched to 100%, and
+its grid from twice the track novelty to six and a half times it.
+
+The tolerance is a quarter of a BPM, which is wider than the 0.1 BPM candidate grid and than
+the 0.065 BPM the selftest misses a generated 200 BPM pulse train by, and much narrower than
+the half a BPM that would round everything. A track measuring 0.38 BPM off an integer was
+played rather than rendered, and rounding it would write a grid that drifts a beat every two
+minutes onto a stick. Those keep their measurement and raise `non-integer-tempo`. Across the
+working set every track snapped, by at most 0.164 BPM.
+
+One thing the snap costs: on some tracks a two-thirds relative now fits almost as well as the
+answer, because two beats in three of a 92 BPM grid land exactly on a 138 BPM beat once both
+tempi are whole. On one track in the working set that comparison came out 6.38 against 5.89,
+where before the snap it was 4.98 against 2.26. The pulse ratio still favours the truth, and
+the number that separates the two by an order of magnitude is the Fourier salience.
 
 ### No tempo prior unless you ask
 
