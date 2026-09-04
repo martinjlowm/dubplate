@@ -19,7 +19,7 @@
   unzip,
   flac,
   lame,
-  music-analyze,
+  dubplate,
 }: let
   # Only these three. A format that reaches the manifest has to have a decode
   # path to WAV for the analyser and a home in one of the outputs; adding one
@@ -53,7 +53,7 @@
     # The name carries the stem of the decoded file, which is the stem of the
     # original, so the tempo and key are prefixed to the name the track already
     # had.
-    music-analyze rename "decoded/$stem.wav" --mode print --reports reports > name.txt
+    dubplate rename "decoded/$stem.wav" --mode print --reports reports > name.txt
     name=$(cat name.txt)
     base="''${name%.wav}"
     echo "$file -> $base"
@@ -80,7 +80,7 @@
     # "out" first, and deliberately tiny: nixpkgs assumes an output by that
     # name exists, and the formats are what anyone actually reads.
     outputs = ["out" "wav" "flac" "mp3" "analysis"];
-    nativeBuildInputs = [unzip flac lame music-analyze];
+    nativeBuildInputs = [unzip flac lame dubplate];
   };
 
   # One entry out of one archive. `unzip -j` drops the path inside the archive,

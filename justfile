@@ -13,11 +13,11 @@ build:
 
 # Analyse a file: just analyze "track.wav" [--start 60 --duration 60 …]
 analyze +ARGS:
-    cargo run --release --bin music-analyze -- analyze "$@"
+    cargo run --release --bin dubplate -- analyze "$@"
 
 # Name files after what was measured in them: just rename <file|dir>... [flags]
 rename +ARGS:
-    cargo run --release --bin music-analyze -- rename "$@"
+    cargo run --release --bin dubplate -- rename "$@"
 
 # Build the renamed library as one Nix output, from ./archives and ./audio
 library:
@@ -33,11 +33,11 @@ export OUT +ARGS:
     set -euo pipefail
     out="$1"
     shift
-    cargo run --release --bin music-analyze -- export --out "$out" "$@"
+    cargo run --release --bin dubplate -- export --out "$out" "$@"
 
 # Measure a generated pulse train, which has no ambiguity to hide behind
 selftest *ARGS:
-    cargo run --release --bin music-analyze -- selftest "$@"
+    cargo run --release --bin dubplate -- selftest "$@"
 
 # Every test in the workspace
 test:
@@ -73,7 +73,7 @@ check-cargo-nix: sync-cargo-nix
 
 # Build the CLI through Nix, against the committed crate graph
 build-nix:
-    devenv build outputs.music-analyze
+    devenv build outputs.dubplate
 
 # All PR gates
 check: fmt-check lint test check-cargo-nix check-workflows

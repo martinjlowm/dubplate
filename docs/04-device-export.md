@@ -1,6 +1,6 @@
 # 04. Device export reference
 
-What `music-analyze export` writes, where it writes it, and which field each
+What `dubplate export` writes, where it writes it, and which field each
 value comes from. For how to build a stick, see the README how-to guides; for
 why the writer exists at all, see the README explanation.
 

@@ -178,7 +178,7 @@ pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<O
     );
 
     let report = AnalysisReport {
-        tool: "music-analyze",
+        tool: "dubplate",
         version: env!("CARGO_PKG_VERSION"),
         source: SourceInfo {
             path: source.path,

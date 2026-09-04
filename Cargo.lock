@@ -240,6 +240,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "dubplate"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "audio",
+ "clap",
+ "collection",
+ "diagnostics",
+ "engine",
+ "key-detect",
+ "rekordbox",
+ "report",
+ "serde_json",
+ "spectral",
+ "tempo",
+ "waveform",
+]
+
+[[package]]
 name = "either"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -405,25 +424,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "music-analyze"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "audio",
- "clap",
- "collection",
- "diagnostics",
- "engine",
- "key-detect",
- "rekordbox",
- "report",
- "serde_json",
- "spectral",
- "tempo",
- "waveform",
 ]
 
 [[package]]

@@ -6,9 +6,9 @@ the code, not from memory; a name that appears here exists.
 ## Commands
 
 ```
-music-analyze analyze  <FILE> [OPTIONS]
-music-analyze rename   <PATH>... [OPTIONS]
-music-analyze selftest [OPTIONS]
+dubplate analyze  <FILE> [OPTIONS]
+dubplate rename   <PATH>... [OPTIONS]
+dubplate selftest [OPTIONS]
 ```
 
 `analyze` reads a WAV file and writes a report directory. `rename` names files after what it

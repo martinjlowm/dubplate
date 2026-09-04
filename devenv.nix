@@ -41,14 +41,14 @@
     release = true;
   };
 
-  music-analyze = workspace.workspaceMembers."music-analyze".build;
+  dubplate = workspace.workspaceMembers."dubplate".build;
 
   # ./archives holds zip downloads and ./audio holds loose files. Both are
   # gitignored, both may be symlinks to wherever the files already live, and Nix
   # imports whatever they point at.
   mkLibrary = import ./nix/library.nix {
     inherit (pkgs) lib runCommand unzip flac lame;
-    inherit music-analyze;
+    inherit dubplate;
   };
 
   library = mkLibrary {
@@ -58,7 +58,7 @@
 
   device = import ./nix/device.nix {
     inherit (pkgs) lib runCommand dosfstools mtools;
-    inherit music-analyze;
+    inherit dubplate;
   };
 
   # One USB image per format, each carrying that format's files and both
@@ -128,7 +128,7 @@ in {
     stages = ["pre-commit" "manual"];
   };
 
-  # `devenv build outputs.music-analyze` builds the CLI through the crate graph
+  # `devenv build outputs.dubplate` builds the CLI through the crate graph
   # rather than through the local cargo cache, which is what CI checks and what
   # anyone with Nix can reproduce.
   # Both trees nest the same way: build the whole thing, or one format of it.
@@ -142,6 +142,6 @@ in {
   # library is one derivation with several outputs; usb is three derivations
   # behind one, since each image is built from different audio.
   outputs = {
-    inherit music-analyze library usb;
+    inherit dubplate library usb;
   };
 }

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@factbird/music-analyze-ci-cd",
+      "name": "@factbird/dubplate-ci-cd",
       "dependencies": {
         "@factbird/cdkactions": "^2.1.2",
         "constructs": "^10.3.0",

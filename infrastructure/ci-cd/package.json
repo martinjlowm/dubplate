@@ -1,8 +1,8 @@
 {
-  "name": "@factbird/music-analyze-ci-cd",
+  "name": "@factbird/dubplate-ci-cd",
   "version": "0.1.0",
   "private": true,
-  "description": "GitHub Actions workflows for music-analyze, generated via cdkactions.",
+  "description": "GitHub Actions workflows for dubplate, generated via cdkactions.",
   "type": "module",
   "scripts": {
     "synth": "bun main.ts"

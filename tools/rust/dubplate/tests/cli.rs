@@ -4,7 +4,7 @@ use std::process::Command;
 
 #[test]
 fn selftest_recovers_a_generated_tempo() {
-    let output = Command::new(env!("CARGO_BIN_EXE_music-analyze"))
+    let output = Command::new(env!("CARGO_BIN_EXE_dubplate"))
         .args(["selftest", "--bpm", "174", "--seconds", "45"])
         .output()
         .expect("running the binary");
@@ -19,7 +19,7 @@ fn selftest_recovers_a_generated_tempo() {
 
 #[test]
 fn a_short_file_is_refused_rather_than_guessed_at() {
-    let output = Command::new(env!("CARGO_BIN_EXE_music-analyze"))
+    let output = Command::new(env!("CARGO_BIN_EXE_dubplate"))
         .args(["selftest", "--bpm", "128", "--seconds", "10"])
         .output()
         .expect("running the binary");

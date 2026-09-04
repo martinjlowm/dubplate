@@ -22,7 +22,7 @@ fn write_stereo_wav(path: &PathBuf) {
 
 #[test]
 fn downmixes_and_excerpts() {
-    let path = std::env::temp_dir().join("music-analyze-decode-test.wav");
+    let path = std::env::temp_dir().join("dubplate-decode-test.wav");
     write_stereo_wav(&path);
 
     let decoded = Audio::from_wav(&path).unwrap();

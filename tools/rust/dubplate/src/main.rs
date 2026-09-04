@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
-    name = "music-analyze",
+    name = "dubplate",
     version,
     about = "Tempo and key analysis that shows its working"
 )]

@@ -21,7 +21,7 @@
   runCommand,
   dosfstools,
   mtools,
-  music-analyze,
+  dubplate,
 }: let
   # The device tree: the databases, and nothing else. The audio is placed by the
   # image builder, at the paths the databases already point at.
@@ -33,10 +33,10 @@
     playlist ? "All tracks",
   }:
     runCommand "${name}-device" {
-      nativeBuildInputs = [music-analyze];
+      nativeBuildInputs = [dubplate];
     } ''
       mkdir -p "$out"
-      music-analyze export \
+      dubplate export \
         --audio ${audio} \
         --reports ${analysis} \
         --out "$out" \

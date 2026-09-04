@@ -23,7 +23,7 @@ const nixSetup = [
   { name: 'Install devenv', run: 'nix profile install nixpkgs#devenv' },
 ];
 
-class MusicAnalyzeWorkflows extends Stack {
+class DubplateWorkflows extends Stack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
 
@@ -53,7 +53,7 @@ class MusicAnalyzeWorkflows extends Stack {
       name: 'Nix build',
       runsOn: 'ubuntu-latest',
       timeoutMinutes: 45,
-      steps: [...nixSetup, { name: 'devenv build', run: 'devenv build outputs.music-analyze' }],
+      steps: [...nixSetup, { name: 'devenv build', run: 'devenv build outputs.dubplate' }],
     });
 
     // The committed workflows must equal a fresh synth of this file.
@@ -77,5 +77,5 @@ const app = new App({
   createValidateWorkflow: false,
   outdir: resolve(import.meta.dir, '../../.github/workflows'),
 });
-new MusicAnalyzeWorkflows(app, 'music-analyze');
+new DubplateWorkflows(app, 'dubplate');
 app.synth();

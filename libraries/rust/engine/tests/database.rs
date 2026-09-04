@@ -239,7 +239,7 @@ fn the_information_row_names_the_schema_the_database_is() {
 }
 
 fn tempdir(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("music-analyze-{name}"));
+    let path = std::env::temp_dir().join(format!("dubplate-{name}"));
     let _ = std::fs::remove_dir_all(&path);
     std::fs::create_dir_all(&path).unwrap();
     path

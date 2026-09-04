@@ -1,4 +1,4 @@
-# Agent instructions: music-analyze
+# Agent instructions: dubplate
 
 A Rust CLI that measures tempo and key in a WAV file and writes out the evidence: the novelty
 curve, the tempo salience of every competing candidate, the beat grid over the onsets, a
@@ -19,7 +19,7 @@ is the wrong trade.
 - `libraries/rust/key-detect` chroma to key by profile correlation, with Camelot notation.
 - `libraries/rust/diagnostics` the finding type every stage reports doubts in.
 - `libraries/rust/report` the JSON report, the SVG plots, the PNG spectrogram, the HTML page.
-- `tools/rust/music-analyze` the CLI. `pipeline.rs` runs the pass, `figures.rs` draws,
+- `tools/rust/dubplate` the CLI. `pipeline.rs` runs the pass, `figures.rs` draws,
   `summary.rs` prints, `rename.rs` builds the `<BPM>_<KEY>_<rest>` name.
 - `libraries/rust/collection` the device-neutral track model, and the reader that builds one
   from a report. Neither exporter knows how the numbers were measured.
@@ -160,7 +160,7 @@ No em dashes. Sentence case in headings. Name the actor rather than writing in t
 - **devenv** provides the shell: the toolchain pinned in `rust-toolchain.toml`, `just`,
   `treefmt`, `crate2nix`. `direnv allow`, or `devenv shell`.
 - **crate2nix** resolves the crate graph ahead of time into `Cargo.nix`, which
-  `devenv build outputs.music-analyze` reads. Nothing fetches during evaluation.
+  `devenv build outputs.dubplate` reads. Nothing fetches during evaluation.
 - **outputs.library** builds every track in `archives/` and `audio/` into `wav/`, `flac/` and
   `mp3/`, and **outputs.usb** builds an image from each. Both nest: `outputs.library.flac` is
   one output of a multi-output derivation, `outputs.usb.flac` is one derivation hanging off

@@ -1,11 +1,11 @@
 [package]
-name = "music-analyze"
+name = "dubplate"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "music-analyze"
+name = "dubplate"
 path = "src/main.rs"
 
 [dependencies]

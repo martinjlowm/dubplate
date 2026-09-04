@@ -1,4 +1,4 @@
-# music-analyze
+# dubplate
 
 Tempo and key analysis you can argue with, and a USB stick built from it.
 
@@ -343,7 +343,7 @@ committed graph and the manifests disagree.
 | `libraries/rust/key-detect/` | Chroma to key by profile correlation, in Camelot notation. |
 | `libraries/rust/diagnostics/` | The finding type every stage reports its doubts in. |
 | `libraries/rust/report/` | The JSON report, the SVG plots, the PNG spectrogram, the HTML page. |
-| `tools/rust/music-analyze/` | The CLI: one analysis pass, one output directory. |
+| `tools/rust/dubplate/` | The CLI: one analysis pass, one output directory. |
 | `libraries/rust/collection/` | The device-neutral track model both exporters read, and the reader that builds it from a report. |
 | `libraries/rust/waveform/` | The two waveforms a player draws, at the resolutions their formats read. |
 | `libraries/rust/rekordbox/` | `export.pdb` and the `ANLZ` files, with the reference parser as the test oracle. |
@@ -402,7 +402,7 @@ Both trees nest, so a build takes the lot or one format of it.
 
 | Output | What it is |
 |---|---|
-| `outputs.music-analyze` | The CLI, built through the committed crate graph. |
+| `outputs.dubplate` | The CLI, built through the committed crate graph. |
 | `outputs.library` | Every track named `<BPM>_<KEY>_<original name>`, the three formats side by side. |
 | `outputs.library.flac` | One format. `.wav` and `.mp3` likewise; `.analysis` holds the reports. |
 | `outputs.usb` | A FAT32 image per format, side by side as `wav.img`, `flac.img`, `mp3.img`. |

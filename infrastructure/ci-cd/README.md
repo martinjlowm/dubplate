@@ -20,7 +20,7 @@ One workflow, `cdkactions_ci.yaml`, on pull requests to `main` and on pushes to 
 | Job | Does |
 |---|---|
 | `check` | `just check` in the dev shell: formatting, clippy, tests, crate-graph staleness, and this drift check. |
-| `build` | `devenv build outputs.music-analyze`, which builds every dependency from the committed crate graph. |
+| `build` | `devenv build outputs.dubplate`, which builds every dependency from the committed crate graph. |
 | `workflows-drift` | Re-synthesises this definition and fails if the committed YAML moved. |
 
 Every job installs Nix and devenv and then runs through the dev shell, so CI uses
