@@ -1,0 +1,31 @@
+[package]
+name = "dubplate-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+audio = { workspace = true, features = ["compressed"] }
+collection.workspace = true
+engine.workspace = true
+image.workspace = true
+key-detect.workspace = true
+pipeline.workspace = true
+rekordbox.workspace = true
+report.workspace = true
+
+serde.workspace = true
+serde_json.workspace = true
+# Reading the archive in the same place the analysis runs, so a track's bytes
+# never cross the boundary twice. `deflate` only: a Beatport zip is deflate, and
+# the other methods carry C libraries that do not build for wasm.
+zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
+
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+# A Rust panic in a tab is otherwise `unreachable executed` and nothing else.
+console_error_panic_hook = "0.1"

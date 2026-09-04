@@ -83,10 +83,30 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "dubplate-wasm" = rec {
+      packageId = "dubplate-wasm";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "dubplate-wasm";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "engine" = rec {
       packageId = "engine";
       build = internal.buildRustCrateWithFeatures {
         packageId = "engine";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
+    "image" = rec {
+      packageId = "image";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "image";
       };
 
       # Debug support which might change between releases.
@@ -382,8 +402,17 @@ rec {
             name = "hound";
             packageId = "hound";
           }
+          {
+            name = "symphonia";
+            packageId = "symphonia";
+            optional = true;
+            features = [ "mp3" "aiff" ];
+          }
         ];
-
+        features = {
+          "compressed" = [ "dep:symphonia" ];
+        };
+        resolvedDefaultFeatures = [ "compressed" ];
       };
       "autocfg" = rec {
         crateName = "autocfg";
@@ -563,6 +592,19 @@ rec {
           "nightly_portable_simd" = [ "rustversion" ];
           "rustversion" = [ "dep:rustversion" ];
         };
+      };
+      "byteorder" = rec {
+        crateName = "byteorder";
+        version = "1.5.0";
+        edition = "2021";
+        sha256 = "0jzncxyf404mwqdbspihyzpkndfgda450l0893pz5xj685cg5l0z";
+        authors = [
+          "Andrew Gallant <jamslam@gmail.com>"
+        ];
+        features = {
+          "default" = [ "std" ];
+        };
+        resolvedDefaultFeatures = [ "std" ];
       };
       "cc" = rec {
         crateName = "cc";
@@ -744,6 +786,26 @@ rec {
         version = "1.0.5";
         edition = "2021";
         sha256 = "0w75k89hw39p0mnnhlrwr23q50rza1yjki44qvh2mgrnj065a1qx";
+
+      };
+      "console_error_panic_hook" = rec {
+        crateName = "console_error_panic_hook";
+        version = "0.1.7";
+        edition = "2015";
+        sha256 = "1g5v8s0ndycc10mdn6igy914k645pgpcl8vjpz6nvxkhyirynsm0";
+        authors = [
+          "Nick Fitzgerald <fitzgen@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "cfg-if";
+            packageId = "cfg-if";
+          }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+          }
+        ];
 
       };
       "crc16" = rec {
@@ -1043,6 +1105,76 @@ rec {
         ];
 
       };
+      "dubplate-wasm" = rec {
+        crateName = "dubplate-wasm";
+        version = "0.1.0";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./tools/rust/dubplate-wasm; };
+        libName = "dubplate_wasm";type = [ "cdylib" "rlib" ];
+        dependencies = [
+          {
+            name = "audio";
+            packageId = "audio";
+            features = [ "compressed" ];
+          }
+          {
+            name = "collection";
+            packageId = "collection";
+          }
+          {
+            name = "console_error_panic_hook";
+            packageId = "console_error_panic_hook";
+          }
+          {
+            name = "engine";
+            packageId = "engine";
+          }
+          {
+            name = "image";
+            packageId = "image";
+          }
+          {
+            name = "key-detect";
+            packageId = "key-detect";
+          }
+          {
+            name = "pipeline";
+            packageId = "pipeline";
+          }
+          {
+            name = "rekordbox";
+            packageId = "rekordbox";
+          }
+          {
+            name = "report";
+            packageId = "report";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+          {
+            name = "serde-wasm-bindgen";
+            packageId = "serde-wasm-bindgen";
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+          }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+          }
+          {
+            name = "zip";
+            packageId = "zip";
+            usesDefaultFeatures = false;
+            features = [ "deflate-flate2" ];
+          }
+        ];
+
+      };
       "either" = rec {
         crateName = "either";
         version = "1.18.0";
@@ -1102,6 +1234,16 @@ rec {
         sha256 = "03swzqznragy8n0x31lqc78g2af054jwivp7lkrbrc0khz74lyl7";
 
       };
+      "extended" = rec {
+        crateName = "extended";
+        version = "0.1.0";
+        edition = "2021";
+        sha256 = "0r830ak1a9775i9yl5lljm29zbnlncw7xlfz35mhgjrz43c775mg";
+        authors = [
+          "Dietrich Epp <depp@zdome.net>"
+        ];
+
+      };
       "fallible-iterator" = rec {
         crateName = "fallible-iterator";
         version = "0.3.0";
@@ -1128,6 +1270,37 @@ rec {
         ];
         features = {
         };
+      };
+      "fatfs" = rec {
+        crateName = "fatfs";
+        version = "0.3.6";
+        edition = "2015";
+        sha256 = "1q28a0snri3rzmcvhgk8xzxw42ds1q7p24y58p2ssyrdgs79yrh5";
+        authors = [
+          "Rafał Harabień <rafalh92@outlook.com>"
+        ];
+        dependencies = [
+          {
+            name = "bitflags";
+            packageId = "bitflags 1.3.2";
+          }
+          {
+            name = "byteorder";
+            packageId = "byteorder";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "log";
+            packageId = "log";
+          }
+        ];
+        features = {
+          "chrono" = [ "dep:chrono" ];
+          "core_io" = [ "dep:core_io" ];
+          "default" = [ "chrono" "std" "alloc" ];
+          "std" = [ "byteorder/std" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "std" ];
       };
       "fdeflate" = rec {
         crateName = "fdeflate";
@@ -1241,6 +1414,88 @@ rec {
           "default" = [ "std" ];
         };
       };
+      "futures-core" = rec {
+        crateName = "futures-core";
+        version = "0.3.34";
+        edition = "2018";
+        sha256 = "0pjgv4fx0np6hrs5sz5a2phabwv0z70yr51v03injbi44bjrkmlj";
+        libName = "futures_core";
+        features = {
+          "default" = [ "std" ];
+          "portable-atomic" = [ "dep:portable-atomic" ];
+          "std" = [ "alloc" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "std" ];
+      };
+      "futures-task" = rec {
+        crateName = "futures-task";
+        version = "0.3.34";
+        edition = "2018";
+        sha256 = "1zfilqs8nwlfqz4prk7ihvpp5avvzins87ibzlxzq5fhs7ipshfd";
+        libName = "futures_task";
+        features = {
+          "default" = [ "std" ];
+          "std" = [ "alloc" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "std" ];
+      };
+      "futures-util" = rec {
+        crateName = "futures-util";
+        version = "0.3.34";
+        edition = "2018";
+        sha256 = "1g3r9ghzq7c2fh34lis43i72xavk9p84npgfwgb5vfpqcwjajl0d";
+        libName = "futures_util";
+        dependencies = [
+          {
+            name = "futures-core";
+            packageId = "futures-core";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "futures-task";
+            packageId = "futures-task";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "slab";
+            packageId = "slab";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "alloc" = [ "futures-core/alloc" "futures-task/alloc" "slab" ];
+          "async-await-macro" = [ "async-await" "futures-macro" ];
+          "channel" = [ "std" "futures-channel" ];
+          "compat" = [ "std" "futures_01" "libc" ];
+          "default" = [ "std" "async-await" "async-await-macro" ];
+          "futures-channel" = [ "dep:futures-channel" ];
+          "futures-io" = [ "dep:futures-io" ];
+          "futures-macro" = [ "dep:futures-macro" ];
+          "futures-sink" = [ "dep:futures-sink" ];
+          "futures_01" = [ "dep:futures_01" ];
+          "io" = [ "std" "futures-io" "memchr" ];
+          "io-compat" = [ "io" "compat" "tokio-io" "libc" ];
+          "libc" = [ "dep:libc" ];
+          "memchr" = [ "dep:memchr" ];
+          "portable-atomic" = [ "futures-core/portable-atomic" "portable_atomic_crate" ];
+          "portable-atomic-alloc" = [ "portable-atomic-util/alloc" "portable-atomic" ];
+          "portable-atomic-util" = [ "dep:portable-atomic-util" ];
+          "portable_atomic_crate" = [ "dep:portable_atomic_crate" ];
+          "sink" = [ "futures-sink" ];
+          "slab" = [ "dep:slab" ];
+          "spin" = [ "dep:spin" ];
+          "std" = [ "alloc" "futures-core/std" "futures-task/std" "slab/std" ];
+          "tokio-io" = [ "dep:tokio-io" ];
+          "unstable" = [ "futures-core/unstable" "futures-task/unstable" ];
+          "write-all-vectored" = [ "io" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "slab" "std" ];
+      };
       "glob" = rec {
         crateName = "glob";
         version = "0.3.4";
@@ -1353,6 +1608,25 @@ rec {
         ];
 
       };
+      "image" = rec {
+        crateName = "image";
+        version = "0.1.0";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./libraries/rust/image; };
+        dependencies = [
+          {
+            name = "collection";
+            packageId = "collection";
+          }
+          {
+            name = "fatfs";
+            packageId = "fatfs";
+            usesDefaultFeatures = false;
+            features = [ "std" "alloc" ];
+          }
+        ];
+
+      };
       "indexmap" = rec {
         crateName = "indexmap";
         version = "2.14.1";
@@ -1417,6 +1691,13 @@ rec {
             packageId = "cfg-if";
           }
           {
+            name = "futures-util";
+            packageId = "futures-util";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
             name = "wasm-bindgen";
             packageId = "wasm-bindgen";
             usesDefaultFeatures = false;
@@ -1427,6 +1708,7 @@ rec {
           "futures-core-03-stream" = [ "dep:futures-util" "dep:futures-core" ];
           "std" = [ "wasm-bindgen/std" "dep:futures-util" ];
         };
+        resolvedDefaultFeatures = [ "default" "std" "unsafe-eval" ];
       };
       "key-detect" = rec {
         crateName = "key-detect";
@@ -1446,6 +1728,19 @@ rec {
           }
         ];
 
+      };
+      "lazy_static" = rec {
+        crateName = "lazy_static";
+        version = "1.5.0";
+        edition = "2015";
+        sha256 = "1zk6dqqni0193xg6iijh7i3i44sryglwgvx20spdvwk3r6sbrlmv";
+        authors = [
+          "Marvin Löbel <loebel.marvin@gmail.com>"
+        ];
+        features = {
+          "spin" = [ "dep:spin" ];
+          "spin_no_std" = [ "spin" ];
+        };
       };
       "libsqlite3-sys" = rec {
         crateName = "libsqlite3-sys";
@@ -1496,6 +1791,30 @@ rec {
         };
         resolvedDefaultFeatures = [ "bundled" "bundled_bindings" "cc" "default" "min_sqlite_version_3_34_1" "pkg-config" "vcpkg" ];
       };
+      "log" = rec {
+        crateName = "log";
+        version = "0.4.34";
+        edition = "2021";
+        sha256 = "1ihkzn0m33ab79fcl4mkb04n5iwqzbxzyw7l7hazqkffaqzbvy7r";
+        authors = [
+          "The Rust Project Developers"
+        ];
+        features = {
+          "kv_serde" = [ "kv_std" "value-bag/serde" "serde" ];
+          "kv_std" = [ "std" "kv" "value-bag/error" ];
+          "kv_sval" = [ "kv" "value-bag/sval" "sval" "sval_ref" ];
+          "kv_unstable" = [ "kv" "value-bag" ];
+          "kv_unstable_serde" = [ "kv_serde" "kv_unstable_std" ];
+          "kv_unstable_std" = [ "kv_std" "kv_unstable" ];
+          "kv_unstable_sval" = [ "kv_sval" "kv_unstable" ];
+          "serde" = [ "serde_core" ];
+          "serde_core" = [ "dep:serde_core" ];
+          "std" = [ "alloc" ];
+          "sval" = [ "dep:sval" ];
+          "sval_ref" = [ "dep:sval_ref" ];
+          "value-bag" = [ "dep:value-bag" ];
+        };
+      };
       "memchr" = rec {
         crateName = "memchr";
         version = "2.8.3";
@@ -1513,7 +1832,7 @@ rec {
           "std" = [ "alloc" ];
           "use_std" = [ "std" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "std" ];
+        resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
       "miniz_oxide 0.8.9" = rec {
         crateName = "miniz_oxide";
@@ -1837,6 +2156,14 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "pin-project-lite" = rec {
+        crateName = "pin-project-lite";
+        version = "0.2.17";
+        edition = "2018";
+        sha256 = "1kfmwvs271si96zay4mm8887v5khw0c27jc9srw1a75ykvgj54x8";
+        libName = "pin_project_lite";
+
+      };
       "pipeline" = rec {
         crateName = "pipeline";
         version = "0.1.0";
@@ -1854,6 +2181,11 @@ rec {
           {
             name = "report";
             packageId = "report";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
           }
           {
             name = "spectral";
@@ -2130,6 +2462,21 @@ rec {
           "unicode-segment" = [ "regex-syntax?/unicode-segment" ];
         };
         resolvedDefaultFeatures = [ "alloc" "dfa-onepass" "hybrid" "meta" "nfa-backtrack" "nfa-pikevm" "nfa-thompson" "perf-inline" "perf-literal" "perf-literal-multisubstring" "perf-literal-substring" "std" "syntax" "unicode" "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" "unicode-word-boundary" ];
+      };
+      "regex-lite" = rec {
+        crateName = "regex-lite";
+        version = "0.1.9";
+        edition = "2021";
+        sha256 = "0wzr31ysmiy9sw48i36raqbm1iyk2xnq0lp4zbs6fzi47p3k9f6a";
+        libName = "regex_lite";
+        authors = [
+          "The Rust Project Developers"
+          "Andrew Gallant <jamslam@gmail.com>"
+        ];
+        features = {
+          "default" = [ "std" "string" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" "string" ];
       };
       "regex-syntax" = rec {
         crateName = "regex-syntax";
@@ -2478,6 +2825,32 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "derive" "serde_derive" "std" ];
       };
+      "serde-wasm-bindgen" = rec {
+        crateName = "serde-wasm-bindgen";
+        version = "0.6.5";
+        edition = "2018";
+        sha256 = "0sz1l4v8059hiizf5z7r2spm6ws6sqcrs4qgqwww3p7dy1ly20l3";
+        libName = "serde_wasm_bindgen";
+        authors = [
+          "Ingvar Stepanyan <me@rreverser.com>"
+        ];
+        dependencies = [
+          {
+            name = "js-sys";
+            packageId = "js-sys";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+          }
+        ];
+
+      };
       "serde_core" = rec {
         crateName = "serde_core";
         version = "1.0.229";
@@ -2621,6 +2994,20 @@ rec {
           "default" = [ "std" "const-generics" ];
         };
         resolvedDefaultFeatures = [ "const-generics" "default" "std" ];
+      };
+      "slab" = rec {
+        crateName = "slab";
+        version = "0.4.12";
+        edition = "2018";
+        sha256 = "1xcwik6s6zbd3lf51kkrcicdq2j4c1fw0yjdai2apy9467i0sy8c";
+        authors = [
+          "Carl Lerche <me@carllerche.com>"
+        ];
+        features = {
+          "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
+        };
+        resolvedDefaultFeatures = [ "std" ];
       };
       "smallvec" = rec {
         crateName = "smallvec";
@@ -2795,6 +3182,446 @@ rec {
           }
         ];
 
+      };
+      "symphonia" = rec {
+        crateName = "symphonia";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "0914y0kjfzdrp2xlasqayfaysmd1gjxrxvmmrbhd95mnjrmfzvd7";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+          }
+          {
+            name = "symphonia-bundle-flac";
+            packageId = "symphonia-bundle-flac";
+            optional = true;
+          }
+          {
+            name = "symphonia-bundle-mp3";
+            packageId = "symphonia-bundle-mp3";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "symphonia-codec-adpcm";
+            packageId = "symphonia-codec-adpcm";
+            optional = true;
+          }
+          {
+            name = "symphonia-codec-pcm";
+            packageId = "symphonia-codec-pcm";
+            optional = true;
+          }
+          {
+            name = "symphonia-codec-vorbis";
+            packageId = "symphonia-codec-vorbis";
+            optional = true;
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+          {
+            name = "symphonia-format-mkv";
+            packageId = "symphonia-format-mkv";
+            optional = true;
+          }
+          {
+            name = "symphonia-format-ogg";
+            packageId = "symphonia-format-ogg";
+            optional = true;
+          }
+          {
+            name = "symphonia-format-riff";
+            packageId = "symphonia-format-riff";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "symphonia-metadata";
+            packageId = "symphonia-metadata";
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "aac" = [ "dep:symphonia-codec-aac" ];
+          "adpcm" = [ "dep:symphonia-codec-adpcm" ];
+          "aiff" = [ "dep:symphonia-format-riff" "symphonia-format-riff/aiff" ];
+          "alac" = [ "dep:symphonia-codec-alac" ];
+          "all" = [ "all-codecs" "all-formats" "all-meta" ];
+          "all-codecs" = [ "aac" "adpcm" "alac" "flac" "mp1" "mp2" "mp3" "pcm" "vorbis" ];
+          "all-formats" = [ "caf" "isomp4" "mkv" "ogg" "aiff" "wav" ];
+          "all-meta" = [ "ape" "id3v1" "id3v2" ];
+          "ape" = [ "symphonia-metadata/ape" ];
+          "caf" = [ "dep:symphonia-format-caf" ];
+          "default" = [ "opt-simd" "all-meta" "adpcm" "flac" "mkv" "ogg" "pcm" "vorbis" "wav" ];
+          "exp-subtitle-codecs" = [ "symphonia-core/exp-subtitle-codecs" ];
+          "exp-video-codecs" = [ "symphonia-core/exp-video-codecs" ];
+          "flac" = [ "dep:symphonia-bundle-flac" ];
+          "id3v1" = [ "symphonia-metadata/id3v1" ];
+          "id3v2" = [ "symphonia-metadata/id3v2" ];
+          "isomp4" = [ "dep:symphonia-format-isomp4" ];
+          "mkv" = [ "dep:symphonia-format-mkv" ];
+          "mp1" = [ "dep:symphonia-bundle-mp3" "symphonia-bundle-mp3/mp1" ];
+          "mp2" = [ "dep:symphonia-bundle-mp3" "symphonia-bundle-mp3/mp2" ];
+          "mp3" = [ "dep:symphonia-bundle-mp3" "symphonia-bundle-mp3/mp3" ];
+          "mpa" = [ "mp1" "mp2" "mp3" ];
+          "ogg" = [ "dep:symphonia-format-ogg" ];
+          "opt-simd" = [ "opt-simd-sse" "opt-simd-avx" "opt-simd-neon" ];
+          "opt-simd-avx" = [ "symphonia-core/opt-simd-avx" ];
+          "opt-simd-neon" = [ "symphonia-core/opt-simd-neon" ];
+          "opt-simd-sse" = [ "symphonia-core/opt-simd-sse" ];
+          "pcm" = [ "dep:symphonia-codec-pcm" ];
+          "vorbis" = [ "dep:symphonia-codec-vorbis" ];
+          "wav" = [ "dep:symphonia-format-riff" "symphonia-format-riff/wav" ];
+        };
+        resolvedDefaultFeatures = [ "adpcm" "aiff" "all-meta" "ape" "default" "flac" "id3v1" "id3v2" "mkv" "mp3" "ogg" "opt-simd" "opt-simd-avx" "opt-simd-neon" "opt-simd-sse" "pcm" "vorbis" "wav" ];
+      };
+      "symphonia-bundle-flac" = rec {
+        crateName = "symphonia-bundle-flac";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "14kqi9lma3haj1cr7vr2fc7ih7njcvz1w454135ggy7n9z1xa1b4";
+        libName = "symphonia_bundle_flac";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-common";
+            packageId = "symphonia-common";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+          {
+            name = "symphonia-metadata";
+            packageId = "symphonia-metadata";
+            usesDefaultFeatures = false;
+            features = [ "flac" ];
+          }
+        ];
+
+      };
+      "symphonia-bundle-mp3" = rec {
+        crateName = "symphonia-bundle-mp3";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "1paa9fvhl17j1crqqax707lqsxbv1i11pc5kvxvzdgqnhzy5zslq";
+        libName = "symphonia_bundle_mp3";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+          }
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+        ];
+        features = {
+          "default" = [ "mp1" "mp2" "mp3" ];
+        };
+        resolvedDefaultFeatures = [ "mp3" ];
+      };
+      "symphonia-codec-adpcm" = rec {
+        crateName = "symphonia-codec-adpcm";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "0k578828bb4c1fwbizbpa066b02klxixv0n0x7yn54y5n3n34na4";
+        libName = "symphonia_codec_adpcm";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+          "Johannes Hackel <geckoxx90@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+        ];
+
+      };
+      "symphonia-codec-pcm" = rec {
+        crateName = "symphonia-codec-pcm";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "1skf9dn9q3l4qrfa4p3qnz0301az35qladyx5xa47gmchrbafjz0";
+        libName = "symphonia_codec_pcm";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+        ];
+
+      };
+      "symphonia-codec-vorbis" = rec {
+        crateName = "symphonia-codec-vorbis";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "11p9qhd37fnb3y4gvnyriagn5yagh2184lrwd363fqbrrx7hpnbk";
+        libName = "symphonia_codec_vorbis";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-common";
+            packageId = "symphonia-common";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+        ];
+
+      };
+      "symphonia-common" = rec {
+        crateName = "symphonia-common";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "1i6p2amsvia21c99np8ysiqpplph9jf2akk193fqr6zc3363zk1a";
+        libName = "symphonia_common";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+          {
+            name = "symphonia-metadata";
+            packageId = "symphonia-metadata";
+            usesDefaultFeatures = false;
+            features = [ "flac" ];
+          }
+        ];
+
+      };
+      "symphonia-core" = rec {
+        crateName = "symphonia-core";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "1q7n6yj9c46ca99fz0cn63jhbv4kw3bq9mn3s184g7ar9n315i01";
+        libName = "symphonia_core";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "bitflags";
+            packageId = "bitflags 2.13.1";
+          }
+          {
+            name = "bytemuck";
+            packageId = "bytemuck";
+          }
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+          }
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "num-complex";
+            packageId = "num-complex";
+          }
+          {
+            name = "rustfft";
+            packageId = "rustfft";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "smallvec";
+            packageId = "smallvec";
+          }
+        ];
+        features = {
+          "opt-simd" = [ "opt-simd-sse" "opt-simd-avx" "opt-simd-neon" ];
+          "opt-simd-avx" = [ "rustfft/avx" ];
+          "opt-simd-neon" = [ "rustfft/neon" ];
+          "opt-simd-sse" = [ "rustfft/sse" ];
+          "rustfft" = [ "dep:rustfft" ];
+        };
+        resolvedDefaultFeatures = [ "default" "opt-simd-avx" "opt-simd-neon" "opt-simd-sse" "rustfft" ];
+      };
+      "symphonia-format-mkv" = rec {
+        crateName = "symphonia-format-mkv";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "03inarm343v7f8f7b3l6khdv1aqhbvcwpx5kjic6cr48ap0ca5fh";
+        libName = "symphonia_format_mkv";
+        authors = [
+          "Dariusz Niedoba <dariusz.niedoba@gmail.com>"
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+          }
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-common";
+            packageId = "symphonia-common";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+        ];
+
+      };
+      "symphonia-format-ogg" = rec {
+        crateName = "symphonia-format-ogg";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "157r6fl97z2pnpg5n464n2djivvy6xp6sayq519h7iz3yzkram0b";
+        libName = "symphonia_format_ogg";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-common";
+            packageId = "symphonia-common";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+          {
+            name = "symphonia-metadata";
+            packageId = "symphonia-metadata";
+            usesDefaultFeatures = false;
+            features = [ "vorbis" ];
+          }
+        ];
+
+      };
+      "symphonia-format-riff" = rec {
+        crateName = "symphonia-format-riff";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "1gnsnz4xyfbj5w6536vk0jni8y8w0yv09jfpdigim31s10lhkxqz";
+        libName = "symphonia_format_riff";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+          "dedobbin <dedobbindedobbin@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "extended";
+            packageId = "extended";
+          }
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+          {
+            name = "symphonia-metadata";
+            packageId = "symphonia-metadata";
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "aiff" = [ "symphonia-metadata/riff-id3" ];
+          "default" = [ "aiff" "wav" ];
+          "wav" = [ "symphonia-metadata/riff-info" ];
+        };
+        resolvedDefaultFeatures = [ "aiff" "wav" ];
+      };
+      "symphonia-metadata" = rec {
+        crateName = "symphonia-metadata";
+        version = "0.6.1";
+        edition = "2024";
+        sha256 = "1il75jg671df0sl613g4sx64x9g5ss7pdh6vgkpvsxsxf2bklwc3";
+        libName = "symphonia_metadata";
+        authors = [
+          "Philip Deljanov <philip.deljanov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+          }
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "regex-lite";
+            packageId = "regex-lite";
+          }
+          {
+            name = "smallvec";
+            packageId = "smallvec";
+          }
+          {
+            name = "symphonia-core";
+            packageId = "symphonia-core";
+          }
+        ];
+        features = {
+          "default" = [ "ape" "id3v1" "id3v2" ];
+          "flac" = [ "vorbis" ];
+          "riff" = [ "riff-id3" "riff-info" ];
+          "riff-id3" = [ "id3v2" ];
+          "vorbis" = [ "flac" ];
+        };
+        resolvedDefaultFeatures = [ "ape" "flac" "id3v1" "id3v2" "riff-id3" "riff-info" "vorbis" ];
       };
       "syn 2.0.119" = rec {
         crateName = "syn";
@@ -3043,6 +3870,20 @@ rec {
         ];
 
       };
+      "typed-path" = rec {
+        crateName = "typed-path";
+        version = "0.12.3";
+        edition = "2021";
+        sha256 = "03k051dafrnyg3lbm4c85zg0mpfhbn6l9aq4ryq8yyy8h2dzha4f";
+        libName = "typed_path";
+        authors = [
+          "Chip Senkbeil <chip@senkbeil.org>"
+        ];
+        features = {
+          "default" = [ "std" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" ];
+      };
       "unicode-ident" = rec {
         crateName = "unicode-ident";
         version = "1.0.24";
@@ -3126,6 +3967,7 @@ rec {
           "serde_json" = [ "dep:serde_json" ];
           "strict-macro" = [ "wasm-bindgen-macro/strict-macro" ];
         };
+        resolvedDefaultFeatures = [ "default" "std" ];
       };
       "wasm-bindgen-macro" = rec {
         crateName = "wasm-bindgen-macro";
@@ -3547,6 +4389,69 @@ rec {
           "std" = [ "alloc" ];
           "typemap" = [ "dep:typemap" ];
         };
+      };
+      "zip" = rec {
+        crateName = "zip";
+        version = "8.6.0";
+        edition = "2024";
+        sha256 = "16w0aiqiymyy6kjri0aykkmh45pbk6a6ck69hxhal0hm72ssc11d";
+        authors = [
+          "Mathijs van de Nes <git@mathijs.vd-nes.nl>"
+          "Marli Frost <marli@frost.red>"
+          "Ryan Levick <ryan.levick@gmail.com>"
+          "Chris Hennick <hennickc@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "crc32fast";
+            packageId = "crc32fast";
+          }
+          {
+            name = "flate2";
+            packageId = "flate2";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "indexmap";
+            packageId = "indexmap";
+          }
+          {
+            name = "memchr";
+            packageId = "memchr";
+          }
+          {
+            name = "typed-path";
+            packageId = "typed-path";
+          }
+        ];
+        features = {
+          "_arbitrary" = [ "dep:arbitrary" ];
+          "aes-crypto" = [ "dep:aes" "dep:constant_time_eq" "getrandom/std" "dep:hmac" "dep:pbkdf2" "dep:sha1" "dep:zeroize" ];
+          "bitstream-io" = [ "dep:bitstream-io" ];
+          "bzip2" = [ "dep:bzip2" "bzip2/default" "_bzip2_any" ];
+          "bzip2-rs" = [ "dep:bzip2" "bzip2/bzip2-sys" "_bzip2_any" ];
+          "chrono" = [ "dep:chrono" ];
+          "default" = [ "aes-crypto" "bzip2" "deflate64" "deflate" "lzma" "ppmd" "time" "zstd" "xz" ];
+          "deflate" = [ "deflate-zopfli" "deflate-flate2-zlib-rs" ];
+          "deflate-flate2" = [ "_deflate-any" "dep:flate2" ];
+          "deflate-flate2-zlib" = [ "deflate-flate2" "flate2/zlib" ];
+          "deflate-flate2-zlib-ng" = [ "deflate-flate2" "flate2/zlib-ng" ];
+          "deflate-flate2-zlib-ng-compat" = [ "deflate-flate2" "flate2/zlib-ng-compat" ];
+          "deflate-flate2-zlib-rs" = [ "deflate-flate2" "flate2/zlib-rs" ];
+          "deflate-zopfli" = [ "dep:zopfli" "_deflate-any" ];
+          "deflate64" = [ "dep:deflate64" ];
+          "getrandom" = [ "dep:getrandom" ];
+          "jiff-02" = [ "dep:jiff" ];
+          "legacy-zip" = [ "bitstream-io" ];
+          "lzma" = [ "dep:lzma-rust2" ];
+          "nt-time" = [ "dep:nt-time" ];
+          "ppmd" = [ "dep:ppmd-rust" ];
+          "time" = [ "dep:time" ];
+          "xz" = [ "dep:lzma-rust2" ];
+          "zstd" = [ "dep:zstd" ];
+        };
+        resolvedDefaultFeatures = [ "_deflate-any" "deflate-flate2" ];
       };
       "zlib-rs" = rec {
         crateName = "zlib-rs";

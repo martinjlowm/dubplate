@@ -7,5 +7,14 @@ license.workspace = true
 [lib]
 path = "src/lib.rs"
 
+[features]
+# AIFF, MP3 and FLAC decoded in-process, for callers with no `flac` and no
+# `lame` to run first. Off by default: the CLI and the Nix pipeline decode with
+# the reference implementation for each format, and turning this on for them
+# would swap in a third one without saying so.
+compressed = ["dep:symphonia"]
+
 [dependencies]
 hound.workspace = true
+# Defaults already carry FLAC, WAV and the PCM codecs; MP3 and AIFF are opt-in.
+symphonia = { version = "0.6", optional = true, features = ["mp3", "aiff"] }

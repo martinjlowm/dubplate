@@ -1,0 +1,19 @@
+[package]
+name = "image"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+collection.workspace = true
+# FAT32 in Rust, so the filesystem can be made where there is no mkfs.vfat and
+# no mtools: a browser tab. Long file names are always on in this version, which
+# matters: a track truncated to 8.3 is one a player lists as OUT_OF~1.FLA.
+#
+# Without `chrono`, which is the default time provider and reads the clock. The
+# one below returns the epoch instead, so two builds of one collection are two
+# identical images.
+fatfs = { version = "0.3", default-features = false, features = ["std", "alloc"] }

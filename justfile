@@ -55,8 +55,8 @@ fmt:
 fmt-check:
     treefmt --fail-on-change
 
-# Build the analysis and both exporters for the browser, which is what keeps them
-# free of the host.
+# Build the browser boundary, which is what keeps every library it reaches free
+# of the host.
 #
 # A `std::fs` call or a clock reads fine on a laptop and panics in a tab, and the
 # compiler is the only thing that catches the difference.
@@ -65,9 +65,12 @@ fmt-check:
 # `-fzero-call-used-regs=used-gpr` by default, clang refuses that option for a
 # wasm target, and the SQLite the Engine exporter compiles is the C that trips
 # over it.
+#
+# One crate rather than a list: `dubplate-wasm` depends on every library that has
+# to reach a tab, so adding one to it is what puts it under this gate.
 check-wasm:
     NIX_HARDENING_ENABLE="fortify stackprotector pic strictoverflow format relro bindnow" \
-        cargo check --release --target wasm32-unknown-unknown -p pipeline -p rekordbox -p engine
+        cargo check --release --target wasm32-unknown-unknown -p dubplate-wasm
 
 # Regenerate .github/workflows from infrastructure/ci-cd/main.ts (cdkactions)
 synth-workflows:
