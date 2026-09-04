@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-import { App, Job, Stack, Workflow } from '@factbird/cdkactions';
+import { App, Job, Stack, Workflow, defineAction } from '@factbird/cdkactions';
 import type { Construct } from 'constructs';
 
 // The workflows in .github/workflows are GENERATED from this file, not hand
@@ -16,21 +16,31 @@ const expression = (body: string) => `\${{ ${body} }}`;
 // give CI the compiler pinned in rust-toolchain.toml, the same treefmt, the same
 // crate2nix and the same mkfs.vfat that a laptop gets, so a green run here means
 // the same thing as a green run there.
-// Every action is pinned to a commit, tag in the comment beside it. A tag and a
-// branch both move, and whoever moves one runs code in this repository's CI on
-// the next push. Bumping one means resolving the new tag to its commit:
+// Each action is a typed step builder rather than a hand-written `uses` string,
+// so the ref lives in one place and a step that passes the wrong thing fails
+// `bun main.ts` instead of a runner. `defineAction` is what cdkactions builds
+// its own catalogue with, and the catalogue in `actions.ts` (`checkoutV4`,
+// `determinateNixV3` and the rest) pins each action to a tag. These name the
+// commit each tag pointed at instead, because a tag moves and whoever moves it
+// runs code in this repository's CI on the next push. Bump one with:
 //
 //   gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
+//
+// The type parameter declares an action's inputs, and none of these steps passes
+// one, so they are declared as taking none. Reaching for a `with:` here means
+// reading that action's own `action.yml` first and writing down what it accepts.
+const checkout = defineAction('actions/checkout@11d5960a326750d5838078e36cf38b85af677262'); // v4
+const installNix = defineAction(
+  'DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25', // v22
+);
+const nixCache = defineAction(
+  'DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d', // v14
+);
+
 const nixSetup = [
-  { uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' }, // v4
-  {
-    name: 'Install Nix',
-    uses: 'DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25', // v22
-  },
-  {
-    name: 'Nix cache',
-    uses: 'DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d', // v14
-  },
+  checkout(),
+  installNix({ name: 'Install Nix' }),
+  nixCache({ name: 'Nix cache' }),
   { name: 'Install devenv', run: 'nix profile install nixpkgs#devenv' },
 ];
 
