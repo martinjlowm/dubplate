@@ -55,6 +55,21 @@
     archives = ./archives;
     audio = ./audio;
   };
+
+  device = import ./nix/device.nix {
+    inherit (pkgs) lib runCommand dosfstools mtools;
+    inherit music-analyze;
+  };
+
+  # One USB image per format, each carrying that format's files and a database
+  # built from the same analysis.
+  imageFor = format:
+    device.image {
+      name = "usb-${format}";
+      audio = library.${format};
+      inherit (library) analysis;
+      label = "MUSIC";
+    };
 in {
   packages = [
     toolchain
@@ -115,5 +130,12 @@ in {
     wav = library.wav;
     flac = library.flac;
     mp3 = library.mp3;
+
+    # A FAT32 image per format, each with PIONEER/ built from the same
+    # measurements: `devenv build outputs.usb-flac` writes an image to copy to
+    # a stick with dd.
+    usb-wav = imageFor "wav";
+    usb-flac = imageFor "flac";
+    usb-mp3 = imageFor "mp3";
   };
 }

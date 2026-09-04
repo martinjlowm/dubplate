@@ -30,7 +30,7 @@
   # The shared body of a track build. `fetch` leaves exactly one audio file in
   # ./source, and everything after that is the same whichever way it arrived.
   trackScript = fetch: ''
-    mkdir -p "$out" "$wav" "$flac" "$mp3" source decoded
+    mkdir -p "$out" "$wav" "$flac" "$mp3" "$analysis" source decoded reports
     ${fetch}
 
     file=$(ls source | head -n 1)
@@ -53,9 +53,14 @@
     # The name carries the stem of the decoded file, which is the stem of the
     # original, so the tempo and key are prefixed to the name the track already
     # had.
-    name=$(music-analyze rename "decoded/$stem.wav" --mode print)
+    music-analyze rename "decoded/$stem.wav" --mode print --reports reports > name.txt
+    name=$(cat name.txt)
     base="''${name%.wav}"
     echo "$file -> $base"
+
+    # The report is what the exporters read: tempo, key, beat grid and both
+    # waveforms, measured once here rather than again per format.
+    cp "reports/$stem/report.json" "$analysis/$base.json"
     # The default output records the decision, so one track can be inspected
     # without unpacking the format outputs.
     printf '%s\n%s\n' "$file" "$base" > "$out/name"
@@ -74,7 +79,7 @@
   trackAttrs = {
     # "out" first, and deliberately tiny: nixpkgs assumes an output by that
     # name exists, and the formats are what anyone actually reads.
-    outputs = ["out" "wav" "flac" "mp3"];
+    outputs = ["out" "wav" "flac" "mp3" "analysis"];
     nativeBuildInputs = [unzip flac lame music-analyze];
   };
 
@@ -134,10 +139,10 @@ in
       ++ map trackFromFile looseFiles;
   in
     runCommand name {
-      outputs = ["out" "wav" "flac" "mp3"];
+      outputs = ["out" "wav" "flac" "mp3" "analysis"];
       passthru = {inherit tracks;};
     } ''
-      mkdir -p "$wav" "$flac" "$mp3" "$out"
+      mkdir -p "$wav" "$flac" "$mp3" "$analysis" "$out"
 
       # Symlinks, not copies: every track is already in the store under its own
       # derivation, and the output keeps those alive by referring to them.
@@ -158,6 +163,7 @@ in
           link "${track.wav}" "$wav"
           link "${track.flac}" "$flac"
           link "${track.mp3}" "$mp3"
+          link "${track.analysis}" "$analysis"
         '')
         tracks}
 
@@ -166,6 +172,7 @@ in
       ln -s "$wav" "$out/wav"
       ln -s "$flac" "$out/flac"
       ln -s "$mp3" "$out/mp3"
+      ln -s "$analysis" "$out/analysis"
 
       printf 'tracks: %d\n' ${toString (builtins.length tracks)} > "$out/count"
     ''

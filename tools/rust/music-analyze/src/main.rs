@@ -1,5 +1,6 @@
 //! The command line: one analysis pass, one output directory, one summary.
 
+mod export;
 mod figures;
 mod pipeline;
 mod rename;
@@ -30,6 +31,11 @@ enum Command {
     /// Writes links or copies under a directory of your choosing; the files
     /// given are never touched.
     Rename(RenameArgs),
+    /// Write a player-readable device from analysed tracks.
+    ///
+    /// Reads the audio and the reports written by `analyze`, and writes the
+    /// databases a Pioneer or Denon player browses the device through.
+    Export(ExportArgs),
     /// Analyse a synthesised pulse train at a known tempo.
     ///
     /// Every stage runs, so a run that misses a tempo it generated itself points
@@ -184,6 +190,39 @@ struct RenameArgs {
 }
 
 #[derive(Args)]
+pub struct ExportArgs {
+    /// Directory of audio files, read one level deep.
+    #[arg(long)]
+    pub audio: PathBuf,
+
+    /// Directory of `<stem>.json` reports, one per audio file.
+    #[arg(long)]
+    pub reports: PathBuf,
+
+    /// Device root to write into.
+    #[arg(short, long)]
+    pub out: PathBuf,
+
+    /// Which databases to write.
+    #[arg(long, value_enum, default_value_t = export::Target::Rekordbox)]
+    pub target: export::Target,
+
+    /// What to do with the audio files. The default writes databases only,
+    /// because the pipeline that builds a disk image places the audio itself.
+    #[arg(long, value_enum, default_value_t = export::AudioMode::None)]
+    pub audio_mode: export::AudioMode,
+
+    /// Name of the playlist holding every track.
+    #[arg(long, default_value = "All tracks")]
+    pub playlist: String,
+
+    /// Date recorded against every track, as YYYY-MM-DD. Defaults to
+    /// SOURCE_DATE_EPOCH when set, and to today otherwise.
+    #[arg(long)]
+    pub date: Option<String>,
+}
+
+#[derive(Args)]
 struct SelftestArgs {
     /// Tempo of the generated pulse train.
     #[arg(long, default_value_t = 174.0)]
@@ -201,6 +240,7 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Analyze(args) => analyze(args),
         Command::Rename(args) => rename_files(args),
+        Command::Export(args) => export::run(args),
         Command::Selftest(args) => selftest(args),
     }
 }

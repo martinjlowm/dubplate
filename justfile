@@ -13,9 +13,17 @@ analyze +ARGS:
 rename +ARGS:
     cargo run --release --bin music-analyze -- rename {{ARGS}}
 
-# Build the renamed library as one Nix output, from ./audio
+# Build the renamed library as one Nix output, from ./archives and ./audio
 library:
     devenv build outputs.library
+
+# Build a FAT32 USB image for one format: just usb flac
+usb FORMAT:
+    devenv build outputs.usb-{{FORMAT}}
+
+# Write a device tree from analysed tracks: just export <dir> --audio A --reports R
+export OUT +ARGS:
+    cargo run --release --bin music-analyze -- export --out {{OUT}} {{ARGS}}
 
 # Measure a generated pulse train, which has no ambiguity to hide behind
 selftest *ARGS:

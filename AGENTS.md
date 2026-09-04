@@ -21,7 +21,13 @@ is the wrong trade.
 - `libraries/rust/report` the JSON report, the SVG plots, the PNG spectrogram, the HTML page.
 - `tools/rust/music-analyze` the CLI. `pipeline.rs` runs the pass, `figures.rs` draws,
   `summary.rs` prints, `rename.rs` builds the `<BPM>_<KEY>_<rest>` name.
+- `libraries/rust/collection` the device-neutral track model, and the reader that builds one
+  from a report. Neither exporter knows how the numbers were measured.
+- `libraries/rust/waveform` the columns both target formats draw, computed once.
+- `libraries/rust/rekordbox` `export.pdb` and the `ANLZ` files, with rekordcrate as the test
+  oracle.
 - `nix/library.nix` the archive pipeline: one derivation per track, three format outputs.
+- `nix/device.nix` the device tree and the FAT32 image built from it.
 
 A crate's home follows from its role. Reusable stages go in `libraries/rust/`, things you run
 go in `tools/rust/`. Both are globs in the workspace manifest, so adding a crate needs no
@@ -63,7 +69,22 @@ edit to `Cargo.toml`.
     you name, and the default mode changes nothing at all. The Nix pipeline is the same rule
     at scale: the archives are inputs, the named collection is an output.
 13. **The tool reads audio and nothing else.** No network, no metadata tags, no online
-    lookup. Every number is measured from the samples.
+    lookup. Every number is measured from the samples. Artist and title come from the file
+    name, which is what the shop wrote.
+14. **The exporters are verified against rekordcrate, and it stays pinned to a commit at
+    least as current as the format analysis.** Any change to a row or section layout keeps
+    the round-trip tests passing. The published 0.3.0 is two years behind and reads a cue
+    point's type as 0 where the current analysis uses 1; that is why the dependency is a git
+    revision and not a version range.
+15. **Fields the format analysis calls unknown carry the constants real exports carry.**
+    They are not padding. Zeroing one because nobody has explained it is how a stick becomes
+    unreadable on a player nobody here owns.
+16. **`Track::device_path` is the only place a file's location on the device is decided.**
+    The database, the analysis files and the image builder all read it. Two of them computing
+    a path separately is two of them disagreeing.
+17. **Dates come from `SOURCE_DATE_EPOCH` when it is set.** Otherwise the same library
+    exports to two different images, which makes every Nix rebuild copy gigabytes for a field
+    nobody can hear.
 
 ## 3. What a change to the algorithm has to show
 
