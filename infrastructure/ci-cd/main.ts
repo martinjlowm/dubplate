@@ -16,10 +16,21 @@ const expression = (body: string) => `\${{ ${body} }}`;
 // give CI the compiler pinned in rust-toolchain.toml, the same treefmt, the same
 // crate2nix and the same mkfs.vfat that a laptop gets, so a green run here means
 // the same thing as a green run there.
+// Every action is pinned to a commit, tag in the comment beside it. A tag and a
+// branch both move, and whoever moves one runs code in this repository's CI on
+// the next push. Bumping one means resolving the new tag to its commit:
+//
+//   gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
 const nixSetup = [
-  { uses: 'actions/checkout@v4' },
-  { name: 'Install Nix', uses: 'DeterminateSystems/nix-installer-action@main' },
-  { name: 'Nix cache', uses: 'DeterminateSystems/magic-nix-cache-action@main' },
+  { uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' }, // v4
+  {
+    name: 'Install Nix',
+    uses: 'DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25', // v22
+  },
+  {
+    name: 'Nix cache',
+    uses: 'DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d', // v14
+  },
   { name: 'Install devenv', run: 'nix profile install nixpkgs#devenv' },
 ];
 
