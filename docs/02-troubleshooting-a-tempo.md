@@ -45,12 +45,18 @@ Compare against the original run:
 
 | Field | Meaning | Better is |
 |---|---|---|
-| `tempo.grid.matched_fraction` | beats with an onset within 50 ms | higher |
 | `tempo.grid.pulse_ratio` | novelty on the grid over the track mean | higher |
+| `tempo.grid.matched_fraction` | beats with an onset within 50 ms | higher |
 | `tempo.stability.agreeing_fraction` | windows within 1% of the answer | higher |
 
-A tempo that wins on all three is the right level whatever the salience ranked first. A split
-verdict usually means the track has two sections at different feels, and step 6 covers that.
+The pulse ratio is the one that separates metrical levels, and the order of that table is the
+order to read it in. The other two stay high at a related level: a 92 BPM grid against a
+138 BPM track matches 91% of its beats, because half of them fall on beats of the real grid
+and the rest on offbeats that carry weight, and every window agrees with it because it is
+consistently wrong. The pulse ratio halves, from 4.98 to 2.26.
+
+A split verdict, where one level wins the ratio and another wins the agreement, usually means
+the track has two sections at different feels. Step 6 covers that.
 
 Then look at `novelty.svg` for both runs. Grid lines standing on the peaks are a fit. Lines
 that start on the peaks and drift off them across the window are a tempo that is close and

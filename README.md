@@ -71,14 +71,22 @@ WAV file.
    right; lines drifting off them across the window mean it is close and wrong.
 
 5. **Settle the ambiguity yourself.** The warning says 91.99 BPM scores 87% of the winner.
-   Force it and compare the grid fit:
+   Force it and compare the grid fits:
 
    ```sh
    just analyze "Ferry_Corsten,_Kosheen-Catch_(Extended_Mix).wav" --min-bpm 88 --max-bpm 96
    ```
 
-   The grid fit collapses. 138 stands. That comparison, not the salience number, is what
-   decides an octave.
+   ```
+   91.98 BPM   A# minor (3A)   7:03 analysed
+     grid      91% of beats within 50 ms, pulse 2.26x the mean, bar phase 1 (contrast 2.48)
+   ```
+
+   91% of beats still land on an onset, because 92 and 138 are a two-to-three relation and
+   half of a 92 BPM grid falls on beats of the 138 one. The number that separates them is the
+   pulse ratio: 4.98 against 2.26. The 138 grid sits on novelty five times the track mean, the
+   92 grid on barely twice it. 138 stands, and that comparison rather than the salience
+   ranking is what decides an octave.
 
 6. **See a knob change the answer.** The metrical floor is what turned 68.97 into 137.99.
    Turn it off:
