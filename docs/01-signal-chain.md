@@ -122,8 +122,8 @@ a tape rip, by enough to drift a beat every couple of minutes. Those keep their 
 and raise `non-integer-tempo`.
 
 The snap happens before the grid is fitted, so the grid, the file name and both device
-databases state one number. Across the seventeen-track working set it moved every answer onto
-an integer by at most 0.164 BPM, and the grid fit improved on eleven tracks, held on three and
+databases state one number. Across the eighteen-track working set it moved every answer onto
+an integer by at most 0.164 BPM, and the grid fit improved on twelve tracks, held on three and
 lost a point or two on three: the largest gain took a 125 BPM deep house track from 88% of
 beats matched to 100%, and its grid from twice the track novelty to six and a half times it.
 Tracks are written on integers, and a grid fitted to one is measurably the better grid.
@@ -136,9 +136,21 @@ high confidence.
 
 The fit is then measured against the curve it was fitted to: how much novelty sits on the grid
 compared to the track mean, and how many beats have a novelty peak within 50 ms. That figure
-is the tool's most useful number. A salience is a ranking within one run, while a grid fit
-compares runs, which is why forcing a competing tempo and comparing fits is the way to settle
-an octave.
+is the tool's most useful number. A salience is a ranking within one run, while a grid fit is
+measured against the curve and compares across runs, which is what settles an octave.
+
+So the run fits five grids rather than one, at half, two-thirds, three-halves and double the
+answer as well as at the answer itself, and reports the fit of each. A phase search over a
+novelty curve costs a fraction of the transform pass that produced the curve, and it means the
+comparison that decides a metrical level is in the report rather than in a rerun somebody has
+to think of.
+
+One asymmetry is worth stating, because the numbers otherwise mislead. A grid at half the
+tempo reads higher on pulse ratio than the truth, always: every one of its beats is a beat of
+the real grid, and half as many beats have to find an onset. A grid at two-thirds or
+three-halves has beats that land on nothing when it is wrong, so there a better fit is
+evidence, and that is the only case `level-fits-better` fires on. Halves are argued about with
+the Fourier salience and the window spread instead.
 
 ## Key
 

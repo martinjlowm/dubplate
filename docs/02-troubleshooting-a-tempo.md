@@ -32,17 +32,32 @@ The rule is a convention about how music is counted, not a measurement. Undo it 
 counted below 90 BPM, lower the floor rather than turning it off, or every subharmonic
 becomes a candidate answer again.
 
-## 3. Force the competing tempo and compare grid fits
+## 3. Compare the grid fit of every metrical level
 
-This is the step that settles octaves. Salience ranks candidates within one run and cannot be
-compared across runs. Grid fit can.
+This is the step that settles octaves, and the run has already done it. Salience ranks
+candidates within one run and cannot be compared across runs; a grid fit is measured against
+the novelty curve, so it can. Every level carries the fit a rerun at that tempo would
+produce:
 
 ```sh
-just analyze track.wav --min-bpm 80 --max-bpm 88     # a competing level inside a range
-just analyze track.wav --metrical-floor 0            # the level the floor rejected
+jq -r '.tempo.octave_relatives[] | [.label, .bpm, .matched_fraction, .pulse_ratio, .fourier_salience] | @tsv' analysis/*/report.json
 ```
 
-Compare against the original run:
+The `levels` line of the summary is the same thing, and the octave relatives table on the
+page carries all five columns:
+
+```
+126 BPM   5A   5:55 analysed
+  grid      92% of beats within 50 ms, pulse 8.27x the mean, bar phase 1 (contrast 1.47)
+  levels    63 92%/8.8x, 84 83%/5.7x, 189 86%/3.1x, 252 83%/5.7x
+```
+
+`level-fits-better` fires when a two-thirds or three-halves level beats the answer on both
+grid measures, which is the case worth a rerun. Nothing in the eighteen-track working set
+raises it; forcing `--min-bpm 185 --max-bpm 193` on the 126 BPM track above does, and names
+126 as the better fit.
+
+What each column decides:
 
 | Field | Meaning | Better is |
 |---|---|---|
@@ -50,24 +65,30 @@ Compare against the original run:
 | `tempo.grid.matched_fraction` | beats with an onset within 50 ms | higher |
 | `tempo.stability.agreeing_fraction` | windows within 1% of the answer | higher |
 
-The pulse ratio separates a two-thirds or three-halves relative cleanly. On a 126 BPM track,
-forcing 84 gives 83% of beats matched at a ratio of 5.72, against 92% at 8.27 for the answer:
-two beats in three of an 84 BPM grid land on a real beat and the third lands on nothing.
+The pulse ratio separates a two-thirds or three-halves level cleanly. In the run above, 84 BPM
+matched 83% of its beats at 5.7 times the track novelty against 92% at 8.3 for the answer: two
+beats in three of an 84 BPM grid land on a real beat and the third lands on nothing.
 
-It does not separate a half or a double at all, and it is worth knowing which way it fails.
-Forcing 63 BPM on that same track matches the same 92% of beats at a ratio of 8.81, higher
-than the answer's, because every beat of a 63 BPM grid is a beat of the 126 one and half as
-many beats are being asked to find an onset. Reading the ratio alone would pick the wrong
-level.
+It does not separate a half or a double, and it fails in a direction worth knowing. The 63 BPM
+row matched the same 92% at a higher 8.8, because every beat of a 63 BPM grid is a beat of the
+126 one and half as many beats have to find an onset. Reading that column alone would pick the
+wrong level, which is why `level-fits-better` ignores halves and doubles.
 
 Two other numbers decide a half. The window trace collapses: at 126 BPM the twenty-second
 estimates spread over 0.01 BPM with 88% agreeing, at 63 they spread over 63 BPM with 74%
 agreeing, which is one track being measured as two different things depending on the window.
-And `tempo.candidates[].fourier_salience` gives 126 BPM 1.000 against 0.178 for 63, because it
-measures energy at a beat frequency and the track carries none at 63.
+And `fourier_salience` gives 126 BPM 1.000 against 0.178 for 63, because it measures energy at
+a beat frequency and the track carries none at 63.
 
 A split verdict, where one level wins the ratio and another wins the agreement, usually means
 the track has two sections at different feels. Step 6 covers that.
+
+When the table points at another level, rerun to see it drawn:
+
+```sh
+just analyze track.wav --min-bpm 80 --max-bpm 88     # a competing level inside a range
+just analyze track.wav --metrical-floor 0            # the level the floor rejected
+```
 
 Then look at `novelty.svg` for both runs. Grid lines standing on the peaks are a fit. Lines
 that start on the peaks and drift off them across the window are a tempo that is close and

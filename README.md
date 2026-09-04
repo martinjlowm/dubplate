@@ -40,6 +40,12 @@ the winner and the snap closed the last two hundredths, both saliences are print
 see what the doubling cost, and the Fourier column is what says the floor was right, giving
 126 a score of 1.000 and 63 a sixth of that.
 
+The table below it fits a grid at every metrical level, so the comparison that settles an
+octave is on the page rather than in a rerun. It also shows the trap: 63 BPM matches the same
+92% of beats at a higher 8.81 times the track novelty, because every beat of a 63 BPM grid is
+a beat of the 126 one. The two-thirds and three-halves levels are the ones a grid can reject,
+and they read 83% and 86%.
+
 ### The grid drawn over the onsets
 
 ![Six seconds of the onset novelty curve with the 126 BPM beat grid drawn over it](docs/images/novelty.svg)
@@ -539,9 +545,24 @@ it.
 What resolves the octave instead is a stated rule rather than a hidden one. The reported
 tempo is doubled until it clears 90 BPM, provided the doubled candidate still scores at least
 half of the original. Nothing in club music is counted below that; a track that measures at 70
-is being counted in half bars. Across the seventeen-track working set this doubling fires four
+is being counted in half bars. Across the eighteen-track working set this doubling fires five
 times, and every time it does the report carries a `metrical-floor-applied` finding with both
 saliences, so the decision is visible and `--metrical-floor 0` undoes it.
+
+The rule is a convention, so the report also carries the measurement that can argue with it.
+A grid is fitted at every metrical level, not just the reported one, and each carries the
+beats it matched and the novelty it sits on. That is the comparison the troubleshooting guide
+used to describe as a rerun, and it now takes five phase searches over a curve the run already
+has. When a two-thirds or three-halves level fits better than the answer, `level-fits-better`
+says so with both sets of numbers. Nothing in the working set raises it, and forcing a wrong
+level on any track does.
+
+A half is the exception, and stating why matters more than the number. A grid at half the
+tempo reads higher on pulse ratio whatever the truth is, because every one of its beats is a
+beat of the real grid and half as many beats have to find an onset. So the finding ignores
+halves, and the report's own example shows the trap: on the track above, 63 BPM matches the
+same 92% of beats at 8.8 times the track novelty against 8.3 for 126. What separates them is
+the Fourier salience, 1.000 against 0.178, and the window spread, 0.01 BPM against 63.
 
 ### The answer is a whole number
 
@@ -554,7 +575,7 @@ The snap runs before the grid is fitted rather than at the point of printing, be
 name, the beat grid, the rekordbox database and the Engine Library all take the reported
 number, and a grid fitted at 126.02 under an answer of 126 is a grid nobody can check the
 answer against. Fitting at the whole number turns out to fit better: across the working set
-the grid improved on eleven of seventeen tracks, held on three and lost a point or two on
+the grid improved on twelve of eighteen tracks, held on three and lost a point or two on
 three. The largest gain took a 125 BPM deep house track from 88% of beats matched to 100%, and
 its grid from twice the track novelty to six and a half times it.
 
@@ -583,7 +604,7 @@ without one. When the prior rather than the track picked the winner, that is a f
 A finding is a measured disagreement, not a confidence score. `grid-misfit` means fewer than
 half the beats landed near an onset, which is a statement about whether a constant tempo
 describes the track at all. `flat-chroma` means pitch-class energy is nearly uniform, so the
-key ranking below it is arbitrary however good its correlations look. Six of the seventeen
+key ranking below it is arbitrary however good its correlations look. Five of the eighteen
 tracks in the working set raise nothing. That is the point of not raising something on every
 one.
 

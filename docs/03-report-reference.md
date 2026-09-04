@@ -130,7 +130,7 @@ Every `analyze` flag from the transform, onset and tempo tables applies to `self
 | `tempo.octave_shift` | `null`, or the doubling the floor applied, with `from_bpm`, `to_bpm` and both saliences. |
 | `tempo.candidates[]` | Up to five peaks, ranked. Each has `bpm`, `salience`, `weighted_salience` (after the prior), `autocorrelation` (the plain correlation at that lag, with no comb) and `fourier_salience`. |
 | `tempo.candidates_without_prior` | The same ranking with the prior off. Present only when a prior was set. |
-| `tempo.octave_relatives[]` | Salience at `half`, `two-thirds`, `candidate`, `three-halves` and `double` of the reported tempo. |
+| `tempo.octave_relatives[]` | One row per metrical level: `half`, `two-thirds`, `candidate`, `three-halves` and `double` of the reported tempo. Each carries `salience` and `fourier_salience` at that tempo, plus `matched_fraction` and `pulse_ratio` from a grid fitted there, which is what a rerun forcing that tempo would measure. The `candidate` row is the run's own grid. A half reads high on `pulse_ratio` whatever the truth is, since every one of its beats is a beat of the real grid and half as many have to find an onset. |
 | `tempo.grid.offset_seconds` | Where the first beat sits. |
 | `tempo.grid.beats_seconds[]` | Every beat time. |
 | `tempo.grid.pulse_ratio` | Mean novelty on the grid over the track mean. 1.0 is no better than an arbitrary grid; a clean four-to-the-floor track lands between 2 and 4. |
@@ -204,6 +204,7 @@ and changes nothing.
 | `unstable-tempo` | warning | Window estimates spread over more than 2 BPM. |
 | `prior-changed-answer` | warning | With the prior off, a different tempo wins by more than 1 BPM. |
 | `range-edge` | warning | The answer sits within 2 BPM of `--min-bpm` or `--max-bpm`. |
+| `level-fits-better` | warning | A two-thirds or three-halves level matched more beats than the answer at more than 1.05 times its pulse ratio. Halves and doubles are excluded, because a half grid reads higher on both measures whatever the truth is. |
 | `non-integer-tempo` | warning | The measurement sits further from a whole number than `--integer-snap` allows, so it was reported as measured. Produced music is written on integers, so this is a played or ripped source, or a grid that drifts. |
 | `metrical-floor-applied` | info | The floor doubled the answer. Carries both saliences. |
 | `octave-split-windows` | info | More than 15% of windows chose half or double the reported tempo. |

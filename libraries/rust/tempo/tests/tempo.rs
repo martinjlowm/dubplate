@@ -154,3 +154,71 @@ fn a_tempo_between_two_integers_keeps_its_measurement_and_says_why() {
         "a tempo half way between two integers raised {codes:?}"
     );
 }
+
+#[test]
+fn every_metrical_level_carries_the_grid_a_rerun_would_measure() {
+    let (broadband, low) = novelty(150.0, 60.0);
+    let analysis = tempo::analyze(&broadband, &low, &TempoSettings::default());
+
+    let level = |label: &str| {
+        analysis
+            .octave_relatives
+            .iter()
+            .find(|r| r.label == label)
+            .unwrap_or_else(|| panic!("no {label} level in the report"))
+    };
+
+    // The reported level's row is the grid the run already fitted, so the two
+    // cannot disagree without one of them being computed from something else.
+    let answer = level("candidate");
+    assert!(
+        (answer.pulse_ratio - analysis.grid.pulse_ratio).abs() < 1e-9
+            && (answer.matched_fraction - analysis.grid.matched_fraction).abs() < 1e-9,
+        "the candidate row reads {:.4}x and {:.4} against the fitted grid's {:.4}x and {:.4}",
+        answer.pulse_ratio,
+        answer.matched_fraction,
+        analysis.grid.pulse_ratio,
+        analysis.grid.matched_fraction
+    );
+
+    // Half the tempo reads higher on pulse whatever the truth is, which is why
+    // `level-fits-better` ignores it. Documented here because a future reader
+    // will otherwise take the number as evidence.
+    let half = level("half");
+    assert!(
+        half.pulse_ratio > answer.pulse_ratio,
+        "half reads {:.2}x against the answer's {:.2}x, so the caveat on this column is stale",
+        half.pulse_ratio,
+        answer.pulse_ratio
+    );
+
+    // A level with beats landing on nothing reads lower on both.
+    let three_halves = level("three-halves");
+    assert!(
+        three_halves.matched_fraction < answer.matched_fraction,
+        "three-halves matched {:.2} against the answer's {:.2}",
+        three_halves.matched_fraction,
+        answer.matched_fraction
+    );
+}
+
+#[test]
+fn a_level_that_fits_better_than_the_answer_is_named() {
+    // The search range is pinned to three-halves of the generated tempo, so the
+    // answer is 180 BPM on a 120 BPM signal and the two-thirds level is the
+    // truth. This is the case the octave comparison exists to catch.
+    let (broadband, low) = novelty(120.0, 60.0);
+    let forced = TempoSettings {
+        min_bpm: 175.0,
+        max_bpm: 185.0,
+        ..TempoSettings::default()
+    };
+    let analysis = tempo::analyze(&broadband, &low, &forced);
+
+    let codes: Vec<&str> = analysis.diagnostics.iter().map(|d| d.code).collect();
+    assert!(
+        codes.contains(&"level-fits-better"),
+        "reported {:.2} BPM on a 120 BPM signal and raised {codes:?}",
+        analysis.bpm
+    );
+}

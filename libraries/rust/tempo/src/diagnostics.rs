@@ -55,6 +55,44 @@ pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
         }
     }
 
+    // A grid at another level fits the curve better than the one reported.
+    //
+    // Halves and doubles are excluded, and not because they cannot be wrong.
+    // A half grid reads higher on both measures whatever the truth is, since
+    // every one of its beats is a beat of the real grid and half as many beats
+    // have to find an onset, so including them would fire this on every track
+    // and say nothing. Their level is the metrical floor's decision, and the
+    // Fourier salience is what argues about it. A two-thirds or three-halves
+    // grid has beats that land on nothing when it is wrong, so a better fit
+    // there is evidence.
+    if let Some(answer) = analysis
+        .octave_relatives
+        .iter()
+        .find(|r| r.label == "candidate")
+    {
+        for relative in &analysis.octave_relatives {
+            if matches!(relative.label, "candidate" | "half" | "double") {
+                continue;
+            }
+            let fits_better = relative.matched_fraction > answer.matched_fraction
+                && relative.pulse_ratio > answer.pulse_ratio * 1.05;
+            if fits_better {
+                out.push(Diagnostic::warning(
+                    "level-fits-better",
+                    format!(
+                        "a grid at {:.2} BPM ({}) fits this novelty curve better than the answer does, {:.0}% of beats matched at {:.2}x the track novelty against {:.0}% at {:.2}x, so the reported level is the salience ranking's and not the grid's",
+                        relative.bpm,
+                        relative.label,
+                        relative.matched_fraction * 100.0,
+                        relative.pulse_ratio,
+                        answer.matched_fraction * 100.0,
+                        answer.pulse_ratio
+                    ),
+                ));
+            }
+        }
+    }
+
     // The snap was asked for and refused. Rounding here would have moved the
     // grid by more than the tolerance allows, which is a beat of drift every
     // few minutes on a file a player reads the grid straight out of.

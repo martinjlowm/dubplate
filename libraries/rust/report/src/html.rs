@@ -52,6 +52,7 @@ th {{ color: #475569; font-weight: 600; }}
 figure {{ margin: 24px 0; }}
 figure img, figure svg {{ display: block; width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; }}
 figcaption {{ font-size: 13px; color: #475569; margin-top: 8px; }}
+.note {{ color: #475569; font-size: 13px; margin: 0 0 10px; }}
 .finding {{ border-left: 3px solid #cbd5e1; padding: 8px 14px; margin: 10px 0; background: #fff; font-size: 14px; }}
 .finding.warning {{ border-left-color: #c2410c; }}
 .finding code {{ font-size: 12px; color: #64748b; }}
@@ -122,16 +123,34 @@ footer {{ margin-top: 48px; font-size: 12px; color: #64748b; }}
         }),
     );
 
-    let _ = write!(html, "<h2>Octave relatives</h2>");
+    // The two grid columns are what a rerun forcing each level would print, so
+    // this table is the octave comparison rather than a list of near misses.
+    // A half always reads higher on pulse: half as many beats have to find an
+    // onset, and every one of them is a beat of the real grid.
+    let _ = write!(
+        html,
+        "<h2>Octave relatives</h2><p class=\"note\">Salience ranks a level inside this run. \
+         The grid columns are what forcing that tempo would measure, which is what compares \
+         across levels. A half reads high on pulse whatever the truth is.</p>"
+    );
     table(
         &mut html,
-        &["relation", "BPM", "salience", "Fourier"],
+        &[
+            "relation",
+            "BPM",
+            "salience",
+            "Fourier",
+            "beats matched",
+            "pulse",
+        ],
         report.tempo.octave_relatives.iter().map(|o| {
             vec![
                 o.label.to_string(),
                 format!("{:.2}", o.bpm),
                 format!("{:.3}", o.salience),
                 format!("{:.3}", o.fourier_salience),
+                format!("{:.0}%", o.matched_fraction * 100.0),
+                format!("{:.2}x", o.pulse_ratio),
             ]
         }),
     );

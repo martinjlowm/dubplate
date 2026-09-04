@@ -175,13 +175,27 @@ pub struct TempoCandidate {
     pub fourier_salience: f64,
 }
 
-/// The salience of the tempi an octave error would land on.
+/// One metrical level an octave error would land on, and what forcing it would
+/// produce.
+///
+/// The saliences rank the level inside this run. The two grid numbers are what
+/// a rerun at that tempo would print, so the octave comparison the
+/// troubleshooting guide describes is on the page already.
 #[derive(Clone, Debug, Serialize)]
 pub struct OctaveRelative {
     pub label: &'static str,
     pub bpm: f64,
     pub salience: f64,
     pub fourier_salience: f64,
+    /// Fraction of this level's beats with a novelty peak inside the tolerance.
+    pub matched_fraction: f64,
+    /// Mean novelty on this level's grid over the track mean.
+    ///
+    /// Reads higher at half the tempo whatever the truth is, because every beat
+    /// of a half grid is a beat of the real one and half as many beats have to
+    /// find an onset. Compare halves on `fourier_salience` and the window
+    /// spread instead.
+    pub pulse_ratio: f64,
 }
 
 /// Comb-filtered autocorrelation salience across the BPM grid.
@@ -340,7 +354,13 @@ pub fn candidates(
 }
 
 /// Salience at the tempi that an octave or triplet error lands on.
-pub fn octave_relatives(curve: &TempoCurve, fourier: &TempoCurve, bpm: f64) -> Vec<OctaveRelative> {
+pub fn octave_relatives(
+    curve: &TempoCurve,
+    fourier: &TempoCurve,
+    novelty: &Novelty,
+    bpm: f64,
+    tolerance_ms: f64,
+) -> Vec<OctaveRelative> {
     [
         ("half", 0.5),
         ("two-thirds", 2.0 / 3.0),
@@ -351,11 +371,19 @@ pub fn octave_relatives(curve: &TempoCurve, fourier: &TempoCurve, bpm: f64) -> V
     .into_iter()
     .map(|(label, ratio)| {
         let related = bpm * ratio;
+        // A grid per level, which is the comparison that settles an octave.
+        // Salience ranks candidates inside one run and says nothing across
+        // levels; a grid fit is measured against the curve and does. Fitting
+        // one costs a phase search over the novelty curve, so five of them are
+        // cheaper than the one transform pass that produced the curve.
+        let grid = crate::beats::align(novelty, related, tolerance_ms);
         OctaveRelative {
             label,
             bpm: related,
             salience: curve.salience_at(related),
             fourier_salience: fourier.salience_at(related),
+            matched_fraction: grid.matched_fraction,
+            pulse_ratio: grid.pulse_ratio,
         }
     })
     .collect()

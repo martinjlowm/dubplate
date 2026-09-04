@@ -24,7 +24,9 @@ pub fn print(report: &AnalysisReport, out: &Path, no_figures: bool, to: &mut dyn
     // headline rather than left in the JSON: an answer of 138 that came from
     // 137.62 is a different claim from one that came from 137.99, and the
     // reader deciding whether to trust the grid needs the difference here.
-    if (tempo.bpm - tempo.bpm_measured).abs() > 1e-9 {
+    // Half of the smallest move the line can show. Below that the snap closed
+    // a gap the print would round to 0.00, and a line saying so reads as a bug.
+    if (tempo.bpm - tempo.bpm_measured).abs() >= 0.005 {
         let _ = writeln!(
             to,
             "  measured  {:.2} BPM, snapped {:+.2} BPM to a whole number",
@@ -48,6 +50,26 @@ pub fn print(report: &AnalysisReport, out: &Path, no_figures: bool, to: &mut dyn
         tempo.stability.interquartile_range_bpm,
         tempo.stability.agreeing_fraction * 100.0
     );
+
+    // What a rerun at each metrical level would measure, which is the
+    // comparison that settles an octave. The reported level is left out: its
+    // grid is the line above.
+    let levels: Vec<String> = tempo
+        .octave_relatives
+        .iter()
+        .filter(|o| o.label != "candidate" && o.pulse_ratio > 0.0)
+        .map(|o| {
+            format!(
+                "{} {:.0}%/{:.1}x",
+                format_bpm(o.bpm),
+                o.matched_fraction * 100.0,
+                o.pulse_ratio
+            )
+        })
+        .collect();
+    if !levels.is_empty() {
+        let _ = writeln!(to, "  levels    {}", levels.join(", "));
+    }
 
     // The reported tempo is one of the candidates and is already on the first
     // line; the point of this line is what else the curve offered.

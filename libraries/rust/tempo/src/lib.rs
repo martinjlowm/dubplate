@@ -137,7 +137,8 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
         STABILITY_HOP_SECONDS,
     );
     let stability = stability(&over_time, bpm);
-    let octave_relatives = tempogram::octave_relatives(&comb, &fourier, bpm);
+    let octave_relatives =
+        tempogram::octave_relatives(&comb, &fourier, broadband, bpm, GRID_TOLERANCE_MS);
 
     let mut analysis = TempoAnalysis {
         settings: settings.clone(),
