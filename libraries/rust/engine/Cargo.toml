@@ -1,0 +1,22 @@
+[package]
+name = "engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+collection.workspace = true
+waveform.workspace = true
+# The database is SQLite, so this is not a format that can be hand-written.
+# Bundled rather than linked against the host's: the schema below is fixed and
+# so should the engine reading it be.
+rusqlite = { version = "0.32", features = ["bundled"] }
+# Pure-Rust deflate, so the crate graph stays free of C libraries apart from
+# SQLite's own.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+[dev-dependencies]
+waveform.workspace = true

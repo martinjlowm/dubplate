@@ -13,6 +13,7 @@ audio.workspace = true
 diagnostics.workspace = true
 key-detect.workspace = true
 collection.workspace = true
+engine.workspace = true
 rekordbox.workspace = true
 report.workspace = true
 spectral.workspace = true

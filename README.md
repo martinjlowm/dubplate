@@ -8,8 +8,9 @@ bad recording from a bad algorithm. This one writes out the curve the tempo came
 salience of every competing tempo, the beat grid drawn over the onsets it was fitted to, and
 a list of the reasons it might be wrong. The answer is a claim with its evidence attached.
 
-It also writes what it measured onto a USB stick a player will browse: a rekordbox database
-and per-track beat grids, cues and waveforms, on a FAT32 image built by Nix.
+It also writes what it measured onto a USB stick a player will browse: a rekordbox database for
+Pioneer gear, an Engine Library for Denon, and per-track beat grids, cues and waveforms, on a
+FAT32 image built by Nix.
 
 Everything is measured on the file. Nothing is looked up, and the tool never talks to a
 network.
@@ -229,8 +230,8 @@ just usb flac                   # or wav, or mp3
 ```
 
 That analyses every track in `archives/` and `audio/`, names each one after its tempo and
-key, encodes the format you asked for, writes a rekordbox database and the per-track analysis
-files, and puts the lot on a FAT32 image. Copy it to a stick:
+key, encodes the format you asked for, writes both players' databases and the per-track
+analysis files, and puts the lot on a FAT32 image. Copy it to a stick:
 
 ```sh
 dd if=result/usb-flac.img of=/dev/diskN bs=4m     # check twice which disk that is
@@ -278,6 +279,7 @@ committed graph and the manifests disagree.
 | `libraries/rust/collection/` | The device-neutral track model both exporters read, and the reader that builds it from a report. |
 | `libraries/rust/waveform/` | The two waveforms a player draws, at the resolutions their formats read. |
 | `libraries/rust/rekordbox/` | `export.pdb` and the `ANLZ` files, with the reference parser as the test oracle. |
+| `libraries/rust/engine/` | The Engine Library database Denon players read, schema 2.21.2. |
 | `nix/library.nix` | The archive pipeline: zips in, three named format directories out. |
 | `nix/device.nix` | The device tree and the FAT32 image built from it. |
 | `docs/` | `01-signal-chain`, `02-troubleshooting-a-tempo`, `03-report-reference`. |
@@ -403,6 +405,13 @@ and into the playlist entries. That is the strongest check available without har
 the file is well formed and the values survive; it does not say a player accepts it, and no
 CDJ has read one of these sticks yet. The fields whose purpose nobody has established carry the
 constants that appear in real exports, and they are named as unknown where they are written.
+
+Denon's side is easier and harder. Easier because the database is SQLite and its schema is
+recorded in libdjinterop, so the file is checked by its own constraints and triggers as it is
+written. Harder because there is no parser to disagree with: the analysis lives in five
+compressed binary columns, and a mistake inside one of them is a blob that decompresses to the
+wrong numbers rather than a database that fails to open. The tests decode each blob back and
+check the framing, the byte order and the values.
 
 ### One derivation per track
 

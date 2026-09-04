@@ -26,6 +26,8 @@ is the wrong trade.
 - `libraries/rust/waveform` the columns both target formats draw, computed once.
 - `libraries/rust/rekordbox` `export.pdb` and the `ANLZ` files, with rekordcrate as the test
   oracle.
+- `libraries/rust/engine` the Engine Library database, schema 2.21.2, with Denon's own DDL as
+  the check.
 - `nix/library.nix` the archive pipeline: one derivation per track, three format outputs.
 - `nix/device.nix` the device tree and the FAT32 image built from it.
 
@@ -82,7 +84,11 @@ edit to `Cargo.toml`.
 16. **`Track::device_path` is the only place a file's location on the device is decided.**
     The database, the analysis files and the image builder all read it. Two of them computing
     a path separately is two of them disagreeing.
-17. **Dates come from `SOURCE_DATE_EPOCH` when it is set.** Otherwise the same library
+17. **The Engine schema is Denon's and is not tidied.** Column names, the misspelt
+    `currentPlayedIndiciator` and `isPerfomanceDataOfPackedTrackChanged` among them, are what a
+    player looks for. The triggers do work on insert, so rows are written with the columns
+    they fill left alone.
+18. **Dates come from `SOURCE_DATE_EPOCH` when it is set.** Otherwise the same library
     exports to two different images, which makes every Nix rebuild copy gigabytes for a field
     nobody can hear.
 

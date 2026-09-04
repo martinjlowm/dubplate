@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 pub enum Target {
     /// `PIONEER/` for CDJs, XDJs and rekordbox.
     Rekordbox,
-    /// `Engine Library/` for Denon players.
+    /// `Engine Library/Database2/` for Denon players, schema 2.21.2.
     Engine,
     /// Both, on one device. They live in separate directories and neither
     /// player reads the other's, so a stick can carry both.
@@ -57,8 +57,17 @@ pub fn run(args: ExportArgs) -> Result<()> {
     let date = args.date.clone().unwrap_or_else(today);
 
     if matches!(args.target, Target::Rekordbox | Target::Both) {
-        rekordbox::write_device(&args.out, &collection, &rekordbox::Options { date })
-            .context("writing the rekordbox database")?;
+        rekordbox::write_device(
+            &args.out,
+            &collection,
+            &rekordbox::Options { date: date.clone() },
+        )
+        .context("writing the rekordbox database")?;
+    }
+
+    if matches!(args.target, Target::Engine | Target::Both) {
+        engine::write_device(&args.out, &collection, &engine::Options { date })
+            .context("writing the Engine Library database")?;
     }
 
     place_audio(&args.out, &collection, args.audio_mode)?;

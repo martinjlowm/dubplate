@@ -156,6 +156,21 @@ Every `analyze` flag from the transform, onset and tempo tables applies to `self
 | `key.ranked[]` | All 24 keys with their Pearson correlations, best first. |
 | `key.diagnostics[]` | Findings from this stage. |
 
+### waveforms
+
+Two pictures of the track, at the resolutions the device formats read them at.
+The export step reads these rather than decoding the audio a second time.
+
+| Field | Meaning |
+|---|---|
+| `waveforms.preview` | 1200 columns spanning the whole track. |
+| `waveforms.detail` | 150 columns per second. |
+| `.columns_per_second` | What it says. The detail waveform is exactly 150; the preview follows from the length of the track. |
+| `.columns` | Base64 of two bytes per column: the first byte carries the height in its low five bits and the low band in its top three, the second the mid band in its low three bits and the high band in the three above. Every level is 0 to 7, scaled so the loudest band of the column reads 7; the height is 0 to 31. |
+
+Colour is a balance rather than a level, which is why the bands are scaled
+per column: the level is the height. Bands are split at 200 Hz and 2 kHz.
+
 ### bands and spectrum
 
 | Field | Meaning |

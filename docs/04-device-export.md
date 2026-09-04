@@ -9,9 +9,13 @@ why the writer exists at all, see the README explanation.
 ```
 /Contents/138_03A_Artist-Title.flac          the audio, named by what was measured in it
 /PIONEER/rekordbox/export.pdb                the database a Pioneer player browses
-/PIONEER/USBANLZ/P000/00000001/ANLZ0000.DAT  beat grid, cues, preview waveforms
-/PIONEER/USBANLZ/P000/00000001/ANLZ0000.EXT  the scrolling waveform
+/PIONEER/USBANLZ/P000/00000001/ANLZ0000.DAT  beat grid, cues, monochrome waveforms
+/PIONEER/USBANLZ/P000/00000001/ANLZ0000.EXT  the scrolling and colour waveforms
+/Engine Library/Database2/m.db               the database a Denon player browses
 ```
+
+Both databases go on the same device. They read different directories, neither
+player looks at the other's, and the audio in `/Contents` is shared.
 
 Every track's analysis directory is derived from its row id, not hashed, so the
 same collection exports to the same paths. The database stores the path of both
@@ -29,7 +33,7 @@ running by hand.
 | `--audio <DIR>` | required | Directory of audio files, read one level deep. |
 | `--reports <DIR>` | required | Directory of `<stem>.json` reports, one per audio file. |
 | `-o`, `--out <DIR>` | required | Device root to write into. |
-| `--target <NAME>` | `rekordbox` | `rekordbox`, `engine` or `both`. Only `rekordbox` is implemented. |
+| `--target <NAME>` | `rekordbox` | `rekordbox`, `engine` or `both`. The Nix images build with `both`. |
 | `--audio-mode <MODE>` | `none` | `none`, `copy` or `symlink`. |
 | `--playlist <NAME>` | `All tracks` | Name of the playlist holding every track. |
 | `--date <YYYY-MM-DD>` | `SOURCE_DATE_EPOCH`, else today | Written as each track's added and analysed date. |
@@ -60,11 +64,37 @@ analysed on the player and be wrong.
 Nothing reads tags. A WAV carries none worth trusting and the name is what the
 shop wrote, so the name is what the database says.
 
+## The Engine Library
+
+Schema 2.21.2, which is the `Database2` layout Engine DJ 2 and 3 read. The
+earlier `m.db` plus `p.db` pair from Engine Prime and the first SC5000 firmware
+is not written.
+
+| Column or blob | Source |
+|---|---|
+| `bpmAnalyzed`, `bpm` | `tempo.bpm`, exact and rounded |
+| `key` | the Camelot key as Engine numbers it, 0 for 8B through 23 for 7A |
+| `length` | duration in whole seconds |
+| `path` | `../Contents/<file>`, relative to the Engine Library directory |
+| `bitrate`, `fileBytes`, `fileType` | the file |
+| `title`, `artist`, `genre` | the file name and the report |
+| `trackData` | sample rate, length in samples, key, and average loudness per band |
+| `beatData` | two grid markers, beat -4 and one past the end, written as both the analysed and the adjusted grid |
+| `quickCues` | eight empty slots, and the main cue on the first beat |
+| `loops` | eight empty slots |
+| `overviewWaveFormData` | 1024 points of low, mid and high |
+| `Playlist`, `PlaylistEntity` | one playlist, entries as the linked list the format stores |
+
+The scrolling waveform column, `highResolutionWaveFormData`, is left empty: no
+open description of its layout exists, and a player analyses the track on load
+rather than refusing it.
+
+The schema itself is Denon's, transcribed from libdjinterop, which is the open
+record of each Engine schema version. A player checks what it finds, so the
+statements are the format rather than a design.
+
 ## What is not written
 
-- **Colour waveforms.** A player from the Nexus 2 generation onward draws
-  `PWV4`/`PWV5` if they are present and falls back to the monochrome `PWAV` and
-  `PWV3` if they are not. Only the monochrome pair is written.
 - **Album art.** The `Artwork` table exists and is empty; the artwork id on every
   track is zero.
 - **Hot cues.** The hot cue list is written and empty. Only one memory cue, on
@@ -72,7 +102,8 @@ shop wrote, so the name is what the database says.
 - **Index pages.** The database carries data pages only. Browsing by title or by
   artist is built from them by the player.
 - **Song structure, phrase analysis, `PSSI`.** Not written.
-- **The Engine Library.** `--target engine` is accepted and does nothing yet.
+- **Engine's scrolling waveform.** See above.
+- **Engine crates and smartlists.** One playlist per device, and no crates.
 
 ## How much of this is verified
 
@@ -92,10 +123,19 @@ The parser is pinned to an upstream commit rather than the published 0.3.0,
 which reads a cue point's type as 0 where the current analysis and rekordbox use
 1.
 
-What that does not establish is that a player accepts the result. No CDJ or XDJ
-has read one of these sticks. The fields whose purpose nobody has established
-are written with the constants that appear in real exports, and they are marked
-as such in `rows.rs` and `anlz.rs`.
+The colour waveform sections are checked the same way: the red, green, blue and
+height of each column come back from the parser exactly as written.
+
+The Engine database has no reference parser to check it against, so the check
+there is the database itself. Its schema carries constraints, foreign keys and
+triggers, and every row this exporter writes has to satisfy them; the tests then
+read the values back through `PerformanceData`, which is the view a player reads
+the analysis through, and walk the playlist as a player walks it.
+
+What none of this establishes is that a player accepts the result. No CDJ, XDJ
+or Denon deck has read one of these sticks. The fields whose purpose nobody has
+established are written with the constants that appear in real exports, and they
+are marked as such in `rows.rs`, `anlz.rs` and `blob.rs`.
 
 ## Images
 

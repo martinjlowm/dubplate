@@ -80,7 +80,7 @@ impl Column {
 pub struct Waveform {
     pub columns_per_second: f64,
     /// Two bytes per column, base64 in JSON.
-    #[serde(with = "base64_bytes")]
+    #[serde(rename = "columns", with = "base64_bytes")]
     packed: Vec<u8>,
 }
 

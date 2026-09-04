@@ -16,6 +16,7 @@ rust-version = "1.91"
 [workspace.dependencies]
 audio = { path = "libraries/rust/audio" }
 collection = { path = "libraries/rust/collection" }
+engine = { path = "libraries/rust/engine" }
 rekordbox = { path = "libraries/rust/rekordbox" }
 diagnostics = { path = "libraries/rust/diagnostics" }
 spectral = { path = "libraries/rust/spectral" }

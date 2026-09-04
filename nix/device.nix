@@ -9,6 +9,10 @@
 # same tree plus several gigabytes of audio, and rebuilding it to change a
 # database field would copy all of it again.
 #
+# Both databases go on every image. They live in separate directories, neither
+# player reads the other's, and a stick that works on whatever is in the booth is
+# worth the few megabytes.
+#
 # FAT32 because that is what a CDJ mounts. Denon players read exFAT as well, but
 # a stick formatted for both is FAT32, and its four-gigabyte file limit is not a
 # constraint for a track.
@@ -25,7 +29,7 @@
     name,
     audio,
     analysis,
-    target ? "rekordbox",
+    target ? "both",
     playlist ? "All tracks",
   }:
     runCommand "${name}-device" {
@@ -54,7 +58,7 @@ in {
     audio,
     analysis,
     label ? "MUSIC",
-    target ? "rekordbox",
+    target ? "both",
     playlist ? "All tracks",
   }: let
     tree = deviceTree {inherit name audio analysis target playlist;};
