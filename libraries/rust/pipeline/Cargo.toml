@@ -11,6 +11,7 @@ path = "src/lib.rs"
 audio.workspace = true
 key-detect.workspace = true
 report.workspace = true
+serde.workspace = true
 spectral.workspace = true
 tempo.workspace = true
 waveform.workspace = true

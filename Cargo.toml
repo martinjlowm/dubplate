@@ -19,6 +19,7 @@ collection = { path = "libraries/rust/collection" }
 engine = { path = "libraries/rust/engine" }
 rekordbox = { path = "libraries/rust/rekordbox" }
 diagnostics = { path = "libraries/rust/diagnostics" }
+image = { path = "libraries/rust/image" }
 spectral = { path = "libraries/rust/spectral" }
 tempo = { path = "libraries/rust/tempo" }
 key-detect = { path = "libraries/rust/key-detect" }

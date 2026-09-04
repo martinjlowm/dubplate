@@ -9,7 +9,9 @@ use crate::{Beat, Cue, CueKind, Format, Track};
 use serde::Deserialize;
 use std::error::Error;
 use std::fmt;
-use std::path::{Path, PathBuf};
+#[cfg(not(target_family = "wasm"))]
+use std::path::Path;
+use std::path::PathBuf;
 use waveform::Waveform;
 
 #[derive(Deserialize)]
@@ -94,19 +96,46 @@ impl From<serde_json::Error> for LoadError {
 ///
 /// `device_directory` is where the file will sit on the device, e.g.
 /// `/Contents`, and decides the path both databases store.
+///
+/// A thin wrapper over [`parse`]: the three things this reads off the
+/// filesystem are the name, the size and the report bytes, and a browser has
+/// all three without a filesystem to read them from.
+#[cfg(not(target_family = "wasm"))]
 pub fn load(audio: &Path, report: &Path, device_directory: &str) -> Result<Track, LoadError> {
-    let parsed: Report = serde_json::from_slice(&std::fs::read(report)?)?;
     let file_name = audio
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_default();
-    let extension = audio
-        .extension()
-        .map(|e| e.to_string_lossy().to_string())
-        .unwrap_or_default();
+    let file_size = std::fs::metadata(audio)?.len();
+    let mut track = parse(
+        &file_name,
+        file_size,
+        &std::fs::read(report)?,
+        device_directory,
+    )?;
+    // The only field the filesystem knows and the bytes do not: where the file
+    // came from, which is what the CLI copies or links from later.
+    track.source = PathBuf::from(audio);
+    Ok(track)
+}
+
+/// Build a track from a file name, its size, and the bytes of its report.
+///
+/// `source` on the returned track is the file name alone, since there is no
+/// path to record. Everything an exporter reads is set.
+pub fn parse(
+    file_name: &str,
+    file_size: u64,
+    report: &[u8],
+    device_directory: &str,
+) -> Result<Track, LoadError> {
+    let parsed: Report = serde_json::from_slice(report)?;
+    let file_name = file_name.to_string();
+    let extension = file_name
+        .rsplit_once('.')
+        .map_or(String::new(), |(_, e)| e.to_string());
     let format = Format::from_extension(&extension)
         .ok_or_else(|| LoadError::UnsupportedFormat(file_name.clone()))?;
-    let file_size = std::fs::metadata(audio)?.len();
 
     let (artist, title) = split_artist_and_title(&file_name);
 
@@ -154,7 +183,7 @@ pub fn load(audio: &Path, report: &Path, device_directory: &str) -> Result<Track
         .unwrap_or_default();
 
     Ok(Track {
-        source: PathBuf::from(audio),
+        source: PathBuf::from(&file_name),
         device_path: format!("{}/{}", device_directory.trim_end_matches('/'), file_name),
         file_name,
         title,
@@ -187,23 +216,10 @@ pub fn split_artist_and_title(file_name: &str) -> (String, String) {
     let stem = file_name
         .rsplit_once('.')
         .map_or(file_name, |(stem, _)| stem);
-    let stem = strip_analysis_prefix(stem);
+    let stem = crate::naming::strip_prefix(stem);
     let spaced = stem.replace('_', " ");
     match spaced.split_once('-') {
         Some((artist, title)) => (artist.trim().to_string(), title.trim().to_string()),
         None => (String::new(), spaced.trim().to_string()),
     }
-}
-
-/// Drop a `138_03A_` prefix, which is this tool's own and not part of a title.
-fn strip_analysis_prefix(stem: &str) -> &str {
-    let mut parts = stem.splitn(3, '_');
-    let (Some(bpm), Some(key), Some(rest)) = (parts.next(), parts.next(), parts.next()) else {
-        return stem;
-    };
-    let bpm_shaped = bpm.len() == 3 && bpm.bytes().all(|b| b.is_ascii_digit());
-    let key_shaped = key.len() == 3
-        && key.as_bytes()[..2].iter().all(u8::is_ascii_digit)
-        && matches!(key.as_bytes()[2], b'A' | b'B');
-    if bpm_shaped && key_shaped { rest } else { stem }
 }

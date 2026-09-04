@@ -5,8 +5,14 @@
 //! copies of `0.25` would be two answers to what the snap tolerance is.
 
 use key_detect::Profile;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+// Serde, because the CLI is no longer the only caller: a browser form is a JSON
+// object on the way in and the report names the settings a run used on the way
+// out. `default` on every field means a page that knows about half of these
+// still produces the same defaults as `--help` prints for the rest.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
 pub struct AnalysisOptions {
     /// STFT window, in samples. Larger resolves frequency, smaller resolves
     /// time; onsets need time and key needs frequency, which is the tension the

@@ -12,6 +12,9 @@ use std::error::Error;
 use std::fmt;
 use std::path::Path;
 
+#[cfg(feature = "compressed")]
+mod compressed;
+
 /// A decoded track: mono samples in `[-1.0, 1.0]` at `sample_rate`.
 #[derive(Clone, Debug)]
 pub struct Audio {
@@ -25,6 +28,10 @@ pub struct Audio {
 #[derive(Debug)]
 pub enum DecodeError {
     Wav(hound::Error),
+    /// Anything the compressed-format decoder refused, as it described it.
+    /// A string rather than the crate's own error, so the type does not change
+    /// shape with a feature.
+    Container(String),
     Empty,
     /// The requested excerpt starts at or past the end of the file.
     ExcerptOutOfRange {
@@ -37,6 +44,7 @@ impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DecodeError::Wav(e) => write!(f, "cannot read WAV: {e}"),
+            DecodeError::Container(e) => write!(f, "cannot decode: {e}"),
             DecodeError::Empty => write!(f, "file decodes to zero samples"),
             DecodeError::ExcerptOutOfRange { start, duration } => write!(
                 f,

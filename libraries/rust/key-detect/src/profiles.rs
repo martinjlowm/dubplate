@@ -6,9 +6,12 @@
 //! in the report rather than treated as an implementation detail.
 
 use crate::Mode;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+// Deserialize as well as Serialize: the report writes this out, and a browser
+// form reads one back in. Without the second half the settings a page collects
+// cannot become the settings a run uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Profile {
     /// Krumhansl and Kessler's probe-tone ratings. Derived from what listeners
