@@ -6,6 +6,9 @@
 //! how the facts were measured.
 
 pub mod report;
+pub mod sink;
+
+pub use sink::Sink;
 
 use std::path::PathBuf;
 use waveform::Waveform;

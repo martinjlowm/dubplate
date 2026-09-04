@@ -16,8 +16,9 @@ pub mod blob;
 pub mod schema;
 
 use blob::{BeatGridMarker, WaveformPoint};
-use collection::{Collection, Track};
+use collection::{Collection, Sink, Track};
 use rusqlite::{Connection, params};
+#[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 
 /// Where the database lives on the device.
@@ -38,18 +39,31 @@ pub struct Options {
 }
 
 /// Write `Engine Library/` under `root` for this collection.
+#[cfg(not(target_family = "wasm"))]
 pub fn write_device(
     root: &Path,
     collection: &Collection,
     options: &Options,
 ) -> Result<(), rusqlite::Error> {
-    let path = root.join(DATABASE_PATH);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-    }
+    write_device_to(
+        &mut collection::sink::Directory::new(root),
+        collection,
+        options,
+    )
+}
+
+/// Write `Engine Library/` into a sink for this collection.
+///
+/// The database is one file wherever it goes, so this is [`build`] plus a name.
+/// It exists so that a caller assembling a device does not have to know that the
+/// Engine half is a single path while the Pioneer half is a tree.
+pub fn write_device_to(
+    sink: &mut dyn Sink,
+    collection: &Collection,
+    options: &Options,
+) -> Result<(), rusqlite::Error> {
     let database = build(collection, options)?;
-    std::fs::write(&path, database)
+    sink.file(DATABASE_PATH, &database)
         .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
 }
 

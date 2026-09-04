@@ -20,9 +20,10 @@ pub mod pdb;
 pub mod rows;
 pub mod string;
 
-use collection::{Collection, Track};
+use collection::{Collection, Sink, Track};
 use pdb::{Database, PageType};
 use std::io;
+#[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 
 /// Where the database and the analysis files live on the device.
@@ -41,22 +42,34 @@ pub struct Options {
 }
 
 /// Write `PIONEER/` under `root` for this collection.
+#[cfg(not(target_family = "wasm"))]
 pub fn write_device(root: &Path, collection: &Collection, options: &Options) -> io::Result<()> {
-    let database_path = root.join(DATABASE_PATH);
-    if let Some(parent) = database_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
+    write_device_to(
+        &mut collection::sink::Directory::new(root),
+        collection,
+        options,
+    )
+}
 
+/// Write `PIONEER/` into a sink for this collection.
+///
+/// The analysis files first and the database last, which is the order a FAT32
+/// image wants them in and the order a directory does not care about.
+pub fn write_device_to(
+    sink: &mut dyn Sink,
+    collection: &Collection,
+    options: &Options,
+) -> io::Result<()> {
     for (index, track) in collection.tracks.iter().enumerate() {
-        let directory = root.join(analysis_directory(track_id(index)).trim_start_matches('/'));
-        std::fs::create_dir_all(&directory)?;
-        std::fs::write(directory.join("ANLZ0000.DAT"), anlz::dat(track))?;
-        std::fs::write(directory.join("ANLZ0000.EXT"), anlz::ext(track))?;
+        let directory = analysis_directory(track_id(index));
+        let directory = directory.trim_start_matches('/');
+        sink.file(&format!("{directory}/ANLZ0000.DAT"), &anlz::dat(track))?;
+        sink.file(&format!("{directory}/ANLZ0000.EXT"), &anlz::ext(track))?;
     }
 
-    let database = build(collection, options);
-    let mut file = std::fs::File::create(&database_path)?;
-    database.write(&mut file)
+    let mut database_bytes = Vec::new();
+    build(collection, options).write(&mut database_bytes)?;
+    sink.file(DATABASE_PATH, &database_bytes)
 }
 
 /// Build the database in memory, which is what the tests read back.
