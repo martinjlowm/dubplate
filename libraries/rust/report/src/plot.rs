@@ -361,11 +361,20 @@ impl BarChart {
     }
 }
 
+/// Open an SVG, with its stylesheet scoped to the figure it belongs to.
+///
+/// Every selector is prefixed with the root's own class. A `<style>` inside
+/// inline SVG is scoped to the document, not to the SVG, so the unprefixed
+/// `.label` and `.title` this used to emit restyled whatever the surrounding
+/// page called by those names. The browser interface calls its captions
+/// `.label`, and opening a figure there resized every one of them on the page.
+/// The prefix costs nothing in a standalone file, where the root carries the
+/// class and the descendant selectors still match.
 fn header(svg: &mut String, title: &str) {
     let _ = write!(
         svg,
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}" font-family="ui-sans-serif, system-ui, sans-serif">
-<style>.grid{{stroke:#e2e8f0;stroke-width:1}}.tick{{font-size:11px;fill:#475569}}.axis{{stroke:#94a3b8;stroke-width:1}}.title{{font-size:14px;fill:#0f172a;font-weight:600}}.label{{font-size:12px;fill:#334155}}</style>
+        r#"<svg xmlns="http://www.w3.org/2000/svg" class="dubplate-figure" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}" font-family="ui-sans-serif, system-ui, sans-serif">
+<style>.dubplate-figure .grid{{stroke:#e2e8f0;stroke-width:1}}.dubplate-figure .tick{{font-size:11px;fill:#475569}}.dubplate-figure .axis{{stroke:#94a3b8;stroke-width:1}}.dubplate-figure .title{{font-size:14px;fill:#0f172a;font-weight:600}}.dubplate-figure .label{{font-size:12px;fill:#334155}}</style>
 <rect width="{WIDTH}" height="{HEIGHT}" fill="white"/>
 <text x="{MARGIN_LEFT}" y="20" class="title">{}</text>
 "#,
@@ -467,4 +476,36 @@ pub fn escape(text: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+#[cfg(test)]
+mod scoping {
+    /// A figure's stylesheet may not name anything the page around it owns.
+    ///
+    /// These SVGs are inlined into a page, and a `<style>` inside inline SVG
+    /// applies to the whole document. `.label` and `.title` are names any page
+    /// might use for its own text, so every rule here has to be reachable only
+    /// through the figure's root.
+    #[test]
+    fn a_figure_styles_nothing_outside_itself() {
+        let mut svg = String::new();
+        super::header(&mut svg, "a title");
+        let style = svg
+            .split_once("<style>")
+            .and_then(|(_, rest)| rest.split_once("</style>"))
+            .map(|(style, _)| style)
+            .expect("the header writes a stylesheet");
+
+        for rule in style.split('}').filter(|rule| !rule.trim().is_empty()) {
+            let selector = rule.split('{').next().unwrap_or_default().trim();
+            assert!(
+                selector.starts_with(".dubplate-figure "),
+                "`{selector}` escapes the figure and restyles the page around it",
+            );
+        }
+        assert!(
+            svg.contains(r#"class="dubplate-figure""#),
+            "the root carries the class the rules hang off"
+        );
+    }
 }
