@@ -57,7 +57,7 @@ impl Archive {
                 });
             }
         }
-        Ok(serde_wasm_bindgen::to_value(&found)?)
+        Ok(found.serialize(&crate::boundary())?)
     }
 
     /// One entry's bytes, by the name [`Archive::entries`] gave.
