@@ -71,8 +71,8 @@ impl Heatmap {
         let plot_height = height - MARGIN_TOP - MARGIN_BOTTOM;
 
         let mut svg = format!(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" font-family="ui-sans-serif, system-ui, sans-serif">
-<style>.tick{{font-size:11px;fill:#475569}}.axis{{stroke:#94a3b8;stroke-width:1}}.title{{font-size:14px;fill:#0f172a;font-weight:600}}.label{{font-size:12px;fill:#334155}}</style>
+            r#"<svg xmlns="http://www.w3.org/2000/svg" class="dubplate-figure" width="{width}" height="{height}" viewBox="0 0 {width} {height}" font-family="ui-sans-serif, system-ui, sans-serif">
+<style>.dubplate-figure .tick{{font-size:11px;fill:#475569}}.dubplate-figure .axis{{stroke:#94a3b8;stroke-width:1}}.dubplate-figure .title{{font-size:14px;fill:#0f172a;font-weight:600}}.dubplate-figure .label{{font-size:12px;fill:#334155}}</style>
 <rect width="{width}" height="{height}" fill="white"/>
 <text x="{MARGIN_LEFT}" y="20" class="title">{}</text>
 <image href="{}" x="{MARGIN_LEFT}" y="{MARGIN_TOP}" width="{plot_width}" height="{plot_height}" preserveAspectRatio="none"/>
