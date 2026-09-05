@@ -36,6 +36,9 @@ const SLACK_BYTES: u64 = 64 * 1024 * 1024;
 /// that is smaller. 128 MB clears it with any cluster size worth using.
 const MINIMUM_BYTES: u64 = 128 * 1024 * 1024;
 
+/// The sector size `fatfs` formats with, and the unit a disk image is measured in.
+const SECTOR_BYTES: u64 = 512;
+
 /// A fixed volume id. `mkfs.vfat` derives one from the clock otherwise, and two
 /// identical libraries would build to two different images.
 const VOLUME_ID: u32 = 0xDEAD_BEEF;
@@ -76,7 +79,13 @@ pub struct Audio {
 pub fn build(device: &Memory, audio: &[Audio], label: &str) -> Result<Vec<u8>, Error> {
     let payload: u64 =
         device.len() as u64 + audio.iter().map(|a| a.bytes.len() as u64).sum::<u64>();
-    let size = (payload * (100 + SLACK_PERCENT) / 100 + SLACK_BYTES).max(MINIMUM_BYTES);
+    // Rounded up to a whole sector. A raw image is a disk, and a disk is a
+    // number of sectors: macOS will not attach one whose length is not, and the
+    // bytes past the last sector are outside the volume the BPB describes
+    // anyway. Unrounded, this left up to 511 bytes hanging off the end.
+    let size = (payload * (100 + SLACK_PERCENT) / 100 + SLACK_BYTES)
+        .max(MINIMUM_BYTES)
+        .next_multiple_of(SECTOR_BYTES);
 
     // With the `std` feature fatfs reads and writes through `std::io`, so a cursor
     // over a buffer is a disk as far as it is concerned.
@@ -121,7 +130,9 @@ pub fn build(device: &Memory, audio: &[Audio], label: &str) -> Result<Vec<u8>, E
             .map_err(|e| Error(format!("the filesystem would not close cleanly: {e}")))?;
     }
 
-    Ok(storage.into_inner())
+    let mut image = storage.into_inner();
+    repair_dot_entries(&mut image)?;
+    Ok(image)
 }
 
 /// Write one file, making the directories its path names.
@@ -160,6 +171,198 @@ where
     file.write_all(bytes)
         .map_err(|e| Error(format!("could not write {path}: {e}")))?;
     Ok(())
+}
+
+/// Put every subdirectory's `.` and `..` back where the format says they go.
+///
+/// `fatfs` 0.3.6 writes these two through the same path as any other name, so
+/// each arrives behind a long-name entry, and it fills `..` with the parent's
+/// first cluster even when the parent is the root, where the format says zero.
+/// Both are violations a player is entitled to reject, and `fsck_msdos` reports
+/// every directory in the image as not being one.
+///
+/// So the entries are rewritten here rather than there: the crate is four years
+/// unmaintained, and a fork of a FAT driver is a larger thing to own than one
+/// pass over the bytes it produced. Each directory begins
+///
+///   `[long "."] [short "."] [long ".."] [short ".."]`
+///
+/// and leaves as
+///
+///   `[short "."] [short ".."] [deleted] [deleted]`
+///
+/// The long entries become deleted slots rather than free ones. A free slot is
+/// where a reader stops, so blanking them would truncate the directory instead.
+fn repair_dot_entries(image: &mut [u8]) -> Result<(), Error> {
+    let boot = Boot::read(image)?;
+
+    let mut pending = vec![boot.root_cluster];
+    let mut seen = std::collections::HashSet::new();
+
+    while let Some(start) = pending.pop() {
+        if !seen.insert(start) {
+            continue;
+        }
+        if start != boot.root_cluster {
+            boot.repair(image, start);
+        }
+        pending.extend(boot.children(image, start));
+    }
+
+    Ok(())
+}
+
+/// A directory entry is 32 bytes, and `.` and `..` occupy the first four slots.
+const ENTRY: usize = 32;
+/// Marks a slot deleted: skipped by a reader, unlike a zero, which ends the
+/// directory.
+const DELETED: u8 = 0xE5;
+const ATTR_LONG_NAME: u8 = 0x0F;
+const ATTR_DIRECTORY: u8 = 0x10;
+
+/// The handful of BPB fields this pass needs to walk to a directory.
+struct Boot {
+    bytes_per_sector: u64,
+    sectors_per_cluster: u64,
+    reserved_sectors: u64,
+    fats: u64,
+    sectors_per_fat: u64,
+    root_cluster: u32,
+}
+
+impl Boot {
+    fn read(image: &[u8]) -> Result<Self, Error> {
+        if image.len() < 512 {
+            return Err(Error("the image is too small to hold a boot sector".into()));
+        }
+        let at16 = |at: usize| u64::from(u16::from_le_bytes([image[at], image[at + 1]]));
+        let at32 = |at: usize| {
+            u32::from_le_bytes([image[at], image[at + 1], image[at + 2], image[at + 3]])
+        };
+
+        let boot = Boot {
+            bytes_per_sector: at16(0x0B),
+            sectors_per_cluster: u64::from(image[0x0D]),
+            reserved_sectors: at16(0x0E),
+            fats: u64::from(image[0x10]),
+            sectors_per_fat: u64::from(at32(0x24)),
+            root_cluster: at32(0x2C),
+        };
+
+        if boot.bytes_per_sector == 0 || boot.sectors_per_cluster == 0 || boot.root_cluster < 2 {
+            return Err(Error(
+                "the filesystem just made does not describe itself".into(),
+            ));
+        }
+        Ok(boot)
+    }
+
+    /// Where a cluster's data starts.
+    fn offset(&self, cluster: u32) -> usize {
+        let sector = self.reserved_sectors
+            + self.fats * self.sectors_per_fat
+            + (u64::from(cluster) - 2) * self.sectors_per_cluster;
+        (sector * self.bytes_per_sector) as usize
+    }
+
+    fn cluster_bytes(&self) -> usize {
+        (self.sectors_per_cluster * self.bytes_per_sector) as usize
+    }
+
+    /// The next cluster in a chain, while the chain continues.
+    fn next(&self, image: &[u8], cluster: u32) -> Option<u32> {
+        let at = (self.reserved_sectors * self.bytes_per_sector) as usize + cluster as usize * 4;
+        let slot = image.get(at..at + 4)?;
+        let entry = u32::from_le_bytes([slot[0], slot[1], slot[2], slot[3]]) & 0x0FFF_FFFF;
+        (2..0x0FFF_FFF7).contains(&entry).then_some(entry)
+    }
+
+    /// Every cluster a directory occupies, in order.
+    fn chain(&self, image: &[u8], start: u32) -> Vec<u32> {
+        let mut chain = vec![start];
+        let mut at = start;
+        // Bounded by what the image could hold, so a FAT pointing back into its
+        // own chain stops here rather than running forever.
+        let limit = image.len() / self.cluster_bytes().max(1) + 2;
+        while let Some(next) = self.next(image, at) {
+            if chain.len() > limit || chain.contains(&next) {
+                break;
+            }
+            chain.push(next);
+            at = next;
+        }
+        chain
+    }
+
+    /// The first cluster of every subdirectory this one holds.
+    fn children(&self, image: &[u8], start: u32) -> Vec<u32> {
+        let mut children = Vec::new();
+        for cluster in self.chain(image, start) {
+            let base = self.offset(cluster);
+            let Some(data) = image.get(base..base + self.cluster_bytes()) else {
+                continue;
+            };
+            for slot in data.chunks_exact(ENTRY) {
+                match slot[0] {
+                    0 => return children,
+                    DELETED => continue,
+                    _ => {}
+                }
+                if slot[11] == ATTR_LONG_NAME || slot[11] & ATTR_DIRECTORY == 0 {
+                    continue;
+                }
+                if slot[0] == b'.' {
+                    continue;
+                }
+                let first = (u32::from(u16::from_le_bytes([slot[20], slot[21]])) << 16)
+                    | u32::from(u16::from_le_bytes([slot[26], slot[27]]));
+                if first >= 2 {
+                    children.push(first);
+                }
+            }
+        }
+        children
+    }
+
+    /// Rewrite one directory's opening four slots, if they are the shape
+    /// `fatfs` leaves behind. Anything else is left alone.
+    fn repair(&self, image: &mut [u8], cluster: u32) {
+        let base = self.offset(cluster);
+        let Some(slots) = image.get_mut(base..base + 4 * ENTRY) else {
+            return;
+        };
+
+        let long = |slot: &[u8]| slot[11] == ATTR_LONG_NAME;
+        let dot = |slot: &[u8], name: &[u8]| {
+            slot[0] != DELETED && slot[11] & ATTR_DIRECTORY != 0 && &slot[..11] == name
+        };
+        if !(long(&slots[0..ENTRY])
+            && dot(&slots[ENTRY..2 * ENTRY], b".          ")
+            && long(&slots[2 * ENTRY..3 * ENTRY])
+            && dot(&slots[3 * ENTRY..4 * ENTRY], b"..         "))
+        {
+            return;
+        }
+
+        let here: [u8; ENTRY] = slots[ENTRY..2 * ENTRY].try_into().expect("one entry");
+        let mut up: [u8; ENTRY] = slots[3 * ENTRY..4 * ENTRY].try_into().expect("one entry");
+
+        // The root has a cluster number of its own, and `..` still has to say
+        // zero when the root is what it points at.
+        let parent = (u32::from(u16::from_le_bytes([up[20], up[21]])) << 16)
+            | u32::from(u16::from_le_bytes([up[26], up[27]]));
+        if parent == self.root_cluster {
+            up[20..22].fill(0);
+            up[26..28].fill(0);
+        }
+
+        slots[0..ENTRY].copy_from_slice(&here);
+        slots[ENTRY..2 * ENTRY].copy_from_slice(&up);
+        for slot in slots[2 * ENTRY..4 * ENTRY].chunks_exact_mut(ENTRY) {
+            slot.fill(0);
+            slot[0] = DELETED;
+        }
+    }
 }
 
 /// The epoch, for every timestamp FAT wants.
@@ -261,6 +464,109 @@ mod tests {
         assert_eq!(
             build(&device(), &audio, "MUSIC").unwrap(),
             build(&device(), &audio, "MUSIC").unwrap()
+        );
+    }
+
+    /// A raw image is a disk, and a disk is a whole number of sectors.
+    ///
+    /// macOS refuses to attach one that is not, which is what a person meets
+    /// first: the image downloads, and the volume will not open.
+    #[test]
+    fn the_image_is_a_whole_number_of_sectors() {
+        let audio = vec![Audio {
+            file_name: "128_08A_Track.wav".into(),
+            bytes: vec![3u8; 5000],
+        }];
+        let bytes = build(&device(), &audio, "MUSIC").unwrap();
+        assert_eq!(bytes.len() % 512, 0, "{} bytes", bytes.len());
+    }
+
+    /// Every subdirectory opens with `.` and `..`, and nothing before them.
+    ///
+    /// `fatfs` puts a long-name entry in front of each, which is not a thing the
+    /// format allows and which `fsck_msdos` reads as the directory not being a
+    /// directory. `..` also has to be zero when it points at the root, whatever
+    /// cluster the root happens to occupy.
+    #[test]
+    fn a_subdirectory_opens_with_its_dot_entries() {
+        let bytes = build(&device(), &[], "MUSIC").unwrap();
+
+        let sector = u64::from(u16::from_le_bytes([bytes[0x0B], bytes[0x0C]]));
+        let per_cluster = u64::from(bytes[0x0D]);
+        let reserved = u64::from(u16::from_le_bytes([bytes[0x0E], bytes[0x0F]]));
+        let fats = u64::from(bytes[0x10]);
+        let per_fat = u64::from(u32::from_le_bytes([
+            bytes[0x24],
+            bytes[0x25],
+            bytes[0x26],
+            bytes[0x27],
+        ]));
+        let root = u32::from_le_bytes([bytes[0x2C], bytes[0x2D], bytes[0x2E], bytes[0x2F]]);
+        let offset = |cluster: u32| {
+            ((reserved + fats * per_fat + (u64::from(cluster) - 2) * per_cluster) * sector) as usize
+        };
+        let start = |slot: &[u8]| {
+            (u32::from(u16::from_le_bytes([slot[20], slot[21]])) << 16)
+                | u32::from(u16::from_le_bytes([slot[26], slot[27]]))
+        };
+
+        // PIONEER sits in the root, so its `..` is the case that has to read zero.
+        let root_dir = &bytes[offset(root)..offset(root) + (per_cluster * sector) as usize];
+        let pioneer = root_dir
+            .chunks_exact(32)
+            .find(|slot| &slot[..11] == b"PIONEER    " && slot[11] & 0x10 != 0)
+            .map(start)
+            .expect("the root lists PIONEER");
+
+        let dir = &bytes[offset(pioneer)..offset(pioneer) + 4 * 32];
+        assert_eq!(&dir[..11], b".          ", "the first slot is not `.`");
+        assert_eq!(dir[11] & 0x10, 0x10, "`.` is not marked a directory");
+        assert_eq!(start(&dir[..32]), pioneer, "`.` does not point at itself");
+
+        assert_eq!(&dir[32..43], b"..         ", "the second slot is not `..`");
+        assert_eq!(dir[43] & 0x10, 0x10, "`..` is not marked a directory");
+        assert_eq!(
+            start(&dir[32..64]),
+            0,
+            "`..` names the root's cluster where the format says zero",
+        );
+
+        for slot in dir[64..128].chunks_exact(32) {
+            assert_eq!(slot[0], 0xE5, "the slot the long name left is not deleted");
+        }
+    }
+
+    /// The repair leaves the filesystem readable, which is the point of doing it
+    /// in place rather than shifting every entry along.
+    #[test]
+    fn the_files_survive_the_repair() {
+        let audio = vec![Audio {
+            file_name: "126_05A_Lange-Out_Of_The_Sky.flac".into(),
+            bytes: vec![7u8; 4096],
+        }];
+        let bytes = build(&device(), &audio, "MUSIC").unwrap();
+
+        let mut storage = std::io::Cursor::new(bytes);
+        let filesystem = fatfs::FileSystem::new(&mut storage, fatfs::FsOptions::new()).unwrap();
+        let root = filesystem.root_dir();
+
+        let anlz: Vec<String> = root
+            .open_dir("PIONEER/USBANLZ/a1b/c2d3e4f5")
+            .unwrap()
+            .iter()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert!(anlz.contains(&"ANLZ0000.DAT".to_string()), "{anlz:?}");
+
+        let contents: Vec<String> = root
+            .open_dir(CONTENTS)
+            .unwrap()
+            .iter()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert!(
+            contents.contains(&"126_05A_Lange-Out_Of_The_Sky.flac".to_string()),
+            "{contents:?}"
         );
     }
 }
