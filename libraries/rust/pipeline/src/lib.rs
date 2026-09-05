@@ -133,7 +133,12 @@ pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<O
             *slot += *magnitude as f64;
         }
 
-        let column = (frame * image_width / frames.max(1)).min(image_width - 1);
+        // Widened for the same reason the waveform renderer is: usize is 32
+        // bits in a browser, and frames times a spectrogram width is a product
+        // that has no business being held in one.
+        let column = usize::try_from(frame as u64 * image_width as u64 / frames.max(1) as u64)
+            .unwrap_or(usize::MAX)
+            .min(image_width - 1);
         image_bands.energies(magnitudes, &mut image_energies);
         for (row, energy) in image_energies.iter().enumerate() {
             image[row * image_width + column] += *energy as f64;
