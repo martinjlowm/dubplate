@@ -19,7 +19,12 @@ use wasm_bindgen::prelude::*;
 pub use archive::{Archive, Entry};
 
 /// Turn a Rust panic into something the console names.
-#[wasm_bindgen(start)]
+///
+/// Deliberately not `#[wasm_bindgen(start)]`. A module has one start slot, and it
+/// belongs to whoever builds the binary: a library that claims it silently
+/// replaces the caller's own entry point, so a worker whose `main` attaches a
+/// message handler loads, initialises, and then answers nothing. Callers invoke
+/// this themselves, or set the hook their own way.
 pub fn start() {
     console_error_panic_hook::set_once();
 }
