@@ -191,7 +191,16 @@ pub fn render(samples: &[f32], sample_rate: u32, column_count: usize) -> Wavefor
     let mut states = [0.0f64; 3];
 
     for (index, &sample) in samples.iter().enumerate() {
-        let column = (index * column_count / samples.len().max(1)).min(column_count - 1);
+        // Widened, because usize is 32 bits in a browser. The product is a
+        // sample index times a column count, and a 1200-column preview passes
+        // four billion 81 seconds into a 44.1 kHz track; the detail render, at
+        // 150 columns a second, passes it after 26. Every track a person owns
+        // is longer than that, so on wasm32 this multiplied over on all of them
+        // and the analysis died on the first one.
+        let column =
+            usize::try_from(index as u64 * column_count as u64 / samples.len().max(1) as u64)
+                .unwrap_or(usize::MAX)
+                .min(column_count - 1);
         let value = sample as f64;
 
         for (state, coefficient) in states.iter_mut().zip(coefficients) {

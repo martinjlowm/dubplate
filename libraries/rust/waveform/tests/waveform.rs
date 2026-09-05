@@ -85,3 +85,29 @@ fn resampling_keeps_the_peaks() {
         "the spike survived the reduction"
     );
 }
+
+/// The column a sample lands in comes out of a product that leaves 32 bits.
+///
+/// usize is 32 bits in a browser and 64 on the machines these tests run on, so
+/// this passed everywhere while the analysis died on every real track it was
+/// given in a tab. Ninety seconds against the colour preview's 1200 columns puts
+/// the last sample's product at 4.8 billion, and the arithmetic has to survive
+/// it here for the browser to survive it there.
+#[test]
+fn a_track_too_long_for_a_32_bit_product_still_fills_its_last_column() {
+    let seconds = 90.0;
+    let samples = (seconds * f64::from(RATE)) as u64;
+    assert!(
+        samples * COLOUR_PREVIEW_COLUMNS as u64 > u64::from(u32::MAX),
+        "this test is only meaningful while the product passes 32 bits",
+    );
+
+    let signal = synth::sine(220.0, seconds, RATE);
+    let preview = waveform::preview(&signal.samples, RATE);
+
+    assert_eq!(preview.len(), COLOUR_PREVIEW_COLUMNS);
+    assert!(
+        preview.height(COLOUR_PREVIEW_COLUMNS - 1) > 25,
+        "the last column was never written, so the index wrapped",
+    );
+}

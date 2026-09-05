@@ -14,12 +14,29 @@ mod convert;
 
 use collection::{Collection, Playlist};
 use pipeline::AnalysisOptions;
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
+
+/// How everything here crosses the boundary.
+///
+/// `json_compatible`, not the default. serde-wasm-bindgen writes a Rust map as a
+/// JavaScript `Map` unless told otherwise, and the report carries one: it is a
+/// `serde_json::Value`, so its every object arrives as a `Map`. A `Map` is not
+/// what a caller reads a struct out of and not what `JSON.stringify` writes, so
+/// the report would arrive unreadable and stringify to `{}`.
+pub(crate) fn boundary() -> serde_wasm_bindgen::Serializer {
+    serde_wasm_bindgen::Serializer::json_compatible()
+}
 
 pub use archive::{Archive, Entry};
 
 /// Turn a Rust panic into something the console names.
-#[wasm_bindgen(start)]
+///
+/// Deliberately not `#[wasm_bindgen(start)]`. A module has one start slot, and it
+/// belongs to whoever builds the binary: a library that claims it silently
+/// replaces the caller's own entry point, so a worker whose `main` attaches a
+/// message handler loads, initialises, and then answers nothing. Callers invoke
+/// this themselves, or set the hook their own way.
 pub fn start() {
     console_error_panic_hook::set_once();
 }
@@ -30,7 +47,7 @@ pub fn start() {
 /// a default changed in `pipeline` changes the form.
 #[wasm_bindgen(js_name = defaultOptions)]
 pub fn default_options() -> Result<JsValue, JsError> {
-    Ok(serde_wasm_bindgen::to_value(&AnalysisOptions::default())?)
+    Ok(AnalysisOptions::default().serialize(&boundary())?)
 }
 
 /// Analyse one track and hand back everything the report directory holds.
@@ -74,7 +91,7 @@ pub fn analyze(
         convert::figures(pipeline::figures(&outcome, start, 12.0))
     });
 
-    Ok(serde_wasm_bindgen::to_value(&convert::Analysed {
+    Ok(convert::Analysed {
         file_name: file_name.to_string(),
         export_name: collection::naming::target_name(
             file_name,
@@ -83,7 +100,8 @@ pub fn analyze(
         ),
         report: serde_json::from_str(&outcome.report.to_json()?)?,
         figures: drawn,
-    })?)
+    }
+    .serialize(&boundary())?)
 }
 
 /// A device being assembled, one analysed track at a time.
