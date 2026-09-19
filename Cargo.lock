@@ -352,6 +352,7 @@ dependencies = [
  "console_error_panic_hook",
  "engine",
  "image",
+ "js-sys",
  "key-detect",
  "pipeline",
  "rekordbox",
@@ -360,6 +361,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_json",
  "wasm-bindgen",
+ "web-sys",
  "zip",
 ]
 
@@ -488,6 +490,10 @@ name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
+
+[[package]]
+name = "goertzel"
+version = "0.1.0"
 
 [[package]]
 name = "hashbrown"
@@ -1252,6 +1258,7 @@ version = "0.1.0"
 dependencies = [
  "audio",
  "diagnostics",
+ "goertzel",
  "serde",
  "spectral",
 ]
@@ -1392,6 +1399,16 @@ dependencies = [
  "audio",
  "deku",
  "serde",
+]
+
+[[package]]
+name = "web-sys"
+version = "0.3.104"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c435338968042f4f59a557f690a253676d47ce13ceb55d70100e7facf6620a30"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]

@@ -26,6 +26,16 @@ serde_json.workspace = true
 zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 
 wasm-bindgen = "0.2"
+# Uint8Array and Object, which is all the JavaScript side of the OPFS handle is:
+# the buffer both directions copy through and the { at } every call takes.
+js-sys = "0.3"
+# Blob and FileReaderSync, so a file the person picked is read where it already
+# sits rather than after being copied. Two features rather than the crate:
+# web-sys is enormous and compiles only what is named. FileSystemSyncAccessHandle
+# is not among them, because web-sys keeps it behind "web_sys_unstable_apis",
+# a flag every crate in the build would have to be compiled with; `opfs`
+# declares it instead.
+web-sys = { version = "0.3", features = ["Blob", "FileReaderSync"] }
 serde-wasm-bindgen = "0.6"
 # A Rust panic in a tab is otherwise `unreachable executed` and nothing else.
 console_error_panic_hook = "0.1"

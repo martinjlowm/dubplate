@@ -1,0 +1,14 @@
+# Vector instructions for the browser build.
+#
+# `simd128` is off by default for wasm32-unknown-unknown, so a module built
+# without this runs scalar code on an engine that has had SIMD for years. It is
+# what makes rustfft's `wasm_simd` butterflies compile and what lets LLVM
+# vectorise the band reductions and the Goertzel bank, and measured against the
+# same track in a worker it takes the analysis from 2.7 s to 1.9 s.
+#
+# Set here rather than in an environment variable so that `just check-wasm`,
+# `cargo build` and whatever builds the module for a page all agree. Every other
+# target is untouched: the CLI picks AVX or NEON at runtime through rustfft's
+# own dispatch, which needs no flag.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

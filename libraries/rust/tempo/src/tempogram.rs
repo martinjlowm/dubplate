@@ -242,6 +242,11 @@ pub fn comb_salience(novelty: &Novelty, settings: &TempoSettings) -> TempoCurve 
 /// Windowed rather than one transform over the whole curve: a set recorded from
 /// vinyl, or a live edit, drifts by a beat over several minutes, and a global
 /// transform smears that into a low plateau with no peak to pick.
+///
+/// The candidates are 0.1 BPM apart and the bins of a twelve-second window are
+/// five BPM apart, so there is no FFT to read this off: every candidate is a
+/// frequency between bins. `goertzel` evaluates them directly without the sine
+/// and cosine per sample per candidate that doing so used to cost.
 pub fn fourier_salience(
     novelty: &Novelty,
     settings: &TempoSettings,
@@ -267,21 +272,29 @@ pub fn fourier_salience(
         })
         .collect();
 
+    // One resonator per candidate, built once for the whole track. A BPM is a
+    // frequency in beats per second, and the curve is sampled once per frame.
+    let bank = goertzel::Bank::new(
+        &grid
+            .iter()
+            .map(|bpm| std::f64::consts::TAU * (bpm / 60.0) / novelty.frame_rate)
+            .collect::<Vec<f64>>(),
+    );
+
+    // The windowed segment, written once per window rather than once per
+    // candidate. It used to be recomputed inside the frequency loop, which for
+    // a four-minute track meant multiplying the same samples out sixteen
+    // hundred times over.
+    let mut windowed = vec![0.0f64; window_frames];
+
     let mut windows = 0.0;
     let mut start = 0;
     while start + window_frames <= novelty.values.len() {
         let segment = &novelty.values[start..start + window_frames];
-        for (slot, &bpm) in salience.iter_mut().zip(&grid) {
-            let omega = std::f64::consts::TAU * (bpm / 60.0) / novelty.frame_rate;
-            let (mut real, mut imaginary) = (0.0f64, 0.0f64);
-            for (i, &v) in segment.iter().enumerate() {
-                let value = v as f64 * window[i];
-                let phase = omega * i as f64;
-                real += value * phase.cos();
-                imaginary -= value * phase.sin();
-            }
-            *slot += (real * real + imaginary * imaginary).sqrt();
+        for ((slot, &value), &weight) in windowed.iter_mut().zip(segment).zip(&window) {
+            *slot = value as f64 * weight;
         }
+        bank.add_magnitudes(&windowed, &mut salience);
         windows += 1.0;
         start += hop_frames;
     }

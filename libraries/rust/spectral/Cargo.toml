@@ -10,5 +10,15 @@ path = "src/lib.rs"
 [dependencies]
 rustfft.workspace = true
 
+# rustfft's default features are avx, sse and neon, all of which it selects at
+# runtime on a native target, so the CLI already uses whichever the machine has.
+# None of them exist under wasm, where it falls back to scalar butterflies and
+# the browser pays about 40% more for the transform than it needs to. The
+# feature is additive, so naming it here for one target leaves every other
+# build alone. It is inert without `target-feature=+simd128`, which
+# `.cargo/config.toml` sets for this target.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+rustfft = { workspace = true, features = ["wasm_simd"] }
+
 [dev-dependencies]
 audio.workspace = true

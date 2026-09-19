@@ -66,6 +66,13 @@ fmt-check:
 # one a shell calls `cc` is gcc on Linux and gcc cannot target wasm32. Nothing
 # is set here, so the recipe says the same thing from any shell that has them.
 #
+# A check, not a build. Linking the module leaves one undefined import,
+# `env.__stack_chk_fail`, which comes from the C runtime objects inside
+# sqlite-wasm-rs rather than from anything set here: that crate's own build
+# passes `-fno-stack-protector` and those objects reference the canary anyway.
+# Whoever instantiates the module supplies it, because defining it here would
+# take a `#[unsafe(no_mangle)]` and this workspace has no unsafe in it.
+#
 # One crate rather than a list: `dubplate-wasm` depends on every library that has
 # to reach a tab, so adding one to it is what puts it under this gate.
 check-wasm:

@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use key_detect::Profile;
 use pipeline::AnalysisOptions;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(
@@ -221,6 +221,14 @@ struct RenameArgs {
     #[arg(long)]
     reports: Option<PathBuf>,
 
+    /// How many tracks to measure at once. Defaults to the number of cores.
+    ///
+    /// Each one holds its decoded samples while it runs, which for a
+    /// ten-minute track is about a hundred megabytes, so a machine with many
+    /// cores and little memory wants a smaller number than it has cores.
+    #[arg(short, long)]
+    jobs: Option<std::num::NonZeroUsize>,
+
     #[command(flatten)]
     options: AnalysisArgs,
 }
@@ -295,6 +303,11 @@ fn analyze(args: AnalyzeArgs) -> Result<()> {
             duration_seconds: duration,
             start_seconds: args.start,
         },
+        if args.no_figures {
+            pipeline::Figures::Skipped
+        } else {
+            pipeline::Figures::Drawn
+        },
     )?;
 
     let out = args.out.unwrap_or_else(|| {
@@ -348,6 +361,79 @@ fn analyze(args: AnalyzeArgs) -> Result<()> {
     Ok(())
 }
 
+/// Decode and measure every file, on as many threads as there are cores.
+///
+/// Results come back in the order the files were given, not the order they
+/// finished, because the caller's output is a listing and a listing that
+/// reorders itself between runs is one nothing downstream can diff.
+///
+/// The work splits by track rather than inside one: a track is already an
+/// independent job, and the stages inside a track are a chain where each reads
+/// what the last wrote. Eighteen tracks on twelve cores is the whole of the
+/// available parallelism and none of the synchronisation.
+///
+/// Only the report is kept. An `Outcome` also carries the spectrogram and every
+/// novelty curve, and holding eighteen of those at once is a gigabyte for data
+/// the caller does not name.
+fn measure_in_parallel(
+    files: &[PathBuf],
+    options: &AnalysisOptions,
+    jobs: Option<std::num::NonZeroUsize>,
+) -> Result<Vec<report::AnalysisReport>> {
+    let threads = jobs
+        .or_else(|| std::thread::available_parallelism().ok())
+        .map_or(1, std::num::NonZeroUsize::get)
+        .min(files.len().max(1));
+
+    // One slot per file, claimed by whichever thread gets there first.
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let slots: Vec<std::sync::Mutex<Option<Result<report::AnalysisReport>>>> =
+        files.iter().map(|_| std::sync::Mutex::new(None)).collect();
+
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                loop {
+                    let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(file) = files.get(index) else {
+                        return;
+                    };
+                    *slots[index].lock().expect("a slot nothing panicked on") =
+                        Some(measure_one(file, options));
+                }
+            });
+        }
+    });
+
+    slots
+        .into_iter()
+        .map(|slot| {
+            slot.into_inner()
+                .expect("a slot nothing panicked on")
+                .expect("every slot was claimed")
+        })
+        .collect()
+}
+
+/// Decode one file and run the analysis over it.
+fn measure_one(file: &Path, options: &AnalysisOptions) -> Result<report::AnalysisReport> {
+    let decoded =
+        audio::Audio::from_wav(file).with_context(|| format!("decoding {}", file.display()))?;
+    let duration = decoded.duration_seconds();
+    let outcome = pipeline::run(
+        &decoded,
+        options,
+        pipeline::Source {
+            path: file.display().to_string(),
+            duration_seconds: duration,
+            start_seconds: 0.0,
+        },
+        // Naming a file needs a tempo and a key. It has never drawn anything.
+        pipeline::Figures::Skipped,
+    )?;
+    Ok(outcome.report)
+}
+
 fn rename_files(args: RenameArgs) -> Result<()> {
     if args.paths.is_empty() {
         anyhow::bail!("give at least one file or directory to name");
@@ -364,20 +450,15 @@ fn rename_files(args: RenameArgs) -> Result<()> {
         files.extend(rename::wav_files(path)?);
     }
 
-    for file in files {
-        let decoded = audio::Audio::from_wav(&file)
-            .with_context(|| format!("decoding {}", file.display()))?;
-        let duration = decoded.duration_seconds();
-        let outcome = pipeline::run(
-            &decoded,
-            &AnalysisOptions::from(&args.options),
-            pipeline::Source {
-                path: file.display().to_string(),
-                duration_seconds: duration,
-                start_seconds: 0.0,
-            },
-        )?;
-        let report = &outcome.report;
+    // Measured in parallel, written in order. A track is an independent job
+    // that touches nothing another one touches, and the analysis reads no file
+    // and no clock, so the only thing a thread can race on is the output. That
+    // is why the naming, the links and the printing happen below, in the order
+    // the files were listed, whatever order they finished in.
+    let measured = measure_in_parallel(&files, &AnalysisOptions::from(&args.options), args.jobs)?;
+
+    for (file, report) in files.iter().zip(&measured) {
+        let file = file.clone();
         let name = rename::target_name(&file, report.tempo.bpm, &report.key.camelot)?;
 
         if let Some(reports) = &args.reports {
@@ -444,6 +525,8 @@ fn selftest(args: SelftestArgs) -> Result<()> {
             duration_seconds: args.seconds,
             start_seconds: 0.0,
         },
+        // The selftest prints an error in BPM and draws nothing.
+        pipeline::Figures::Skipped,
     )?;
 
     // The measurement, not the reported answer: a tempo snapped to a whole
