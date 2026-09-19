@@ -118,8 +118,10 @@ edit to `Cargo.toml`.
     `SystemTime::now()` added to a library reads fine on a laptop and takes the wasm build with
     it. Two things that build needs, both recorded where they are used: rusqlite 0.40 or newer,
     whose default `ffi-sqlite-wasm-rs` swaps the bundled SQLite for one that compiles against a
-    wasm shim, and a hardening list without `zerocallusedregs`, because the nixpkgs clang
-    wrapper passes an option clang refuses for a wasm target.
+    wasm shim, and the unwrapped clang `devenv.nix` names in
+    `CC_wasm32_unknown_unknown`. cc-rs otherwise takes whatever the shell calls `cc`, which is
+    clang on macOS and gcc on Linux, and gcc cannot target wasm32; that is why this gate passed
+    on a laptop and failed in CI for every run the repository had.
 
 ## 3. What a change to the algorithm has to show
 
