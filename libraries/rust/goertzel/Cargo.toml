@@ -1,0 +1,12 @@
+[package]
+name = "goertzel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+# No dependencies, and none wanted. The whole crate is one recurrence over one
+# slice, which is what makes it worth lifting out of this repository one day.
+[dependencies]

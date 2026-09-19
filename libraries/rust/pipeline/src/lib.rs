@@ -64,16 +64,45 @@ pub struct Source {
     pub start_seconds: f64,
 }
 
+/// Whether the pass keeps what only a figure reads.
+///
+/// The spectrogram is the one thing this pass builds that no number in
+/// `report.json` comes from, and building it costs a tenth of the run: every
+/// frame is folded into 440 rows and scattered across a 1600-column image. A
+/// caller that asked for a tempo and a key pays that for a picture nobody
+/// opened, which is what `--no-figures` and the browser's `figures: false` are
+/// already saying.
+///
+/// Named rather than a `bool`, because `run(&audio, &options, source, false)`
+/// does not say which of the two things false means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Figures {
+    /// Accumulate the spectrogram as the transform runs.
+    Drawn,
+    /// Leave it out. [`Outcome::spectrogram`] is then `None` and
+    /// [`figures`] draws everything else.
+    Skipped,
+}
+
 pub struct Outcome {
     pub report: AnalysisReport,
-    pub spectrogram: Heatmap,
+    /// `None` when the run was asked for [`Figures::Skipped`]. Every other
+    /// field is there either way: the report is the contract and nothing in it
+    /// is read off this.
+    pub spectrogram: Option<Heatmap>,
     /// Long-term average spectrum, as (hertz, decibels).
     pub average_spectrum: Vec<(f64, f64)>,
     /// The curve the tempo estimate was made from.
     pub broadband: Novelty,
 }
 
-pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<Outcome, Error> {
+pub fn run(
+    audio: &Audio,
+    options: &AnalysisOptions,
+    source: Source,
+    figures: Figures,
+) -> Result<Outcome, Error> {
+    let drawing = figures == Figures::Drawn;
     let mut stft = Stft::new(options.window, options.hop);
     let frames = stft.frame_count(audio.samples.len());
     let frame_rate = stft.frame_rate(audio.sample_rate);
@@ -121,8 +150,15 @@ pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<O
     let mut spectrum_sum = vec![0.0f64; stft.bin_count()];
 
     let image_width = IMAGE_WIDTH.min(frames.max(1));
-    let mut image = vec![0.0f64; image_width * IMAGE_HEIGHT];
-    let mut column_counts = vec![0.0f64; image_width];
+    let mut image = vec![
+        0.0f64;
+        if drawing {
+            image_width * IMAGE_HEIGHT
+        } else {
+            0
+        }
+    ];
+    let mut column_counts = vec![0.0f64; if drawing { image_width } else { 0 }];
 
     stft.for_each_frame(&audio.samples, |frame, magnitudes| {
         onset_bands.energies(magnitudes, &mut band_energies);
@@ -133,17 +169,19 @@ pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<O
             *slot += *magnitude as f64;
         }
 
-        // Widened for the same reason the waveform renderer is: usize is 32
-        // bits in a browser, and frames times a spectrogram width is a product
-        // that has no business being held in one.
-        let column = usize::try_from(frame as u64 * image_width as u64 / frames.max(1) as u64)
-            .unwrap_or(usize::MAX)
-            .min(image_width - 1);
-        image_bands.energies(magnitudes, &mut image_energies);
-        for (row, energy) in image_energies.iter().enumerate() {
-            image[row * image_width + column] += *energy as f64;
+        if drawing {
+            // Widened for the same reason the waveform renderer is: usize is 32
+            // bits in a browser, and frames times a spectrogram width is a
+            // product that has no business being held in one.
+            let column = usize::try_from(frame as u64 * image_width as u64 / frames.max(1) as u64)
+                .unwrap_or(usize::MAX)
+                .min(image_width - 1);
+            image_bands.energies(magnitudes, &mut image_energies);
+            for (row, energy) in image_energies.iter().enumerate() {
+                image[row * image_width + column] += *energy as f64;
+            }
+            column_counts[column] += 1.0;
         }
-        column_counts[column] += 1.0;
     });
 
     let band_curves: Vec<Novelty> = flux
@@ -204,14 +242,16 @@ pub fn run(audio: &Audio, options: &AnalysisOptions, source: Source) -> Result<O
         .collect();
 
     let spectrum = summarise_spectrum(&average_spectrum);
-    let spectrogram = build_spectrogram(
-        image,
-        &column_counts,
-        image_width,
-        &image_bands,
-        source.start_seconds,
-        frames as f64 / frame_rate,
-    );
+    let spectrogram = drawing.then(|| {
+        build_spectrogram(
+            image,
+            &column_counts,
+            image_width,
+            &image_bands,
+            source.start_seconds,
+            frames as f64 / frame_rate,
+        )
+    });
 
     let report = AnalysisReport {
         tool: "dubplate",

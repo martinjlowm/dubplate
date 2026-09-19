@@ -17,8 +17,13 @@ fn source(seconds: f64) -> Source {
 #[test]
 fn a_generated_tempo_survives_the_whole_pass() {
     let audio = audio::synth::click_train(128.0, 60.0, 44100);
-    let outcome = pipeline::run(&audio, &AnalysisOptions::default(), source(60.0))
-        .expect("60 seconds is enough to analyse");
+    let outcome = pipeline::run(
+        &audio,
+        &AnalysisOptions::default(),
+        source(60.0),
+        pipeline::Figures::Drawn,
+    )
+    .expect("60 seconds is enough to analyse");
 
     let report = &outcome.report;
     assert_eq!(report.tempo.bpm, 128.0, "reported {}", report.tempo.bpm);
@@ -38,8 +43,13 @@ fn a_generated_tempo_survives_the_whole_pass() {
 #[test]
 fn the_figures_come_back_as_bytes_under_the_names_the_page_references() {
     let audio = audio::synth::click_train(128.0, 45.0, 44100);
-    let outcome = pipeline::run(&audio, &AnalysisOptions::default(), source(45.0))
-        .expect("45 seconds is enough to analyse");
+    let outcome = pipeline::run(
+        &audio,
+        &AnalysisOptions::default(),
+        source(45.0),
+        pipeline::Figures::Drawn,
+    )
+    .expect("45 seconds is enough to analyse");
     let artefacts = pipeline::figures(&outcome, 10.0, 6.0);
 
     let text: Vec<&str> = artefacts
@@ -90,7 +100,12 @@ fn the_figures_come_back_as_bytes_under_the_names_the_page_references() {
 #[test]
 fn a_track_too_short_to_measure_twice_is_refused() {
     let audio = audio::synth::click_train(128.0, 10.0, 44100);
-    let Err(error) = pipeline::run(&audio, &AnalysisOptions::default(), source(10.0)) else {
+    let Err(error) = pipeline::run(
+        &audio,
+        &AnalysisOptions::default(),
+        source(10.0),
+        pipeline::Figures::Drawn,
+    ) else {
         panic!("ten seconds is not enough to analyse and should have been refused");
     };
     assert!(

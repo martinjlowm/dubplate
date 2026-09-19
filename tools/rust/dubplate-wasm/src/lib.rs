@@ -100,6 +100,11 @@ pub fn analyze(
             duration_seconds: duration,
             start_seconds: 0.0,
         },
+        if figures {
+            pipeline::Figures::Drawn
+        } else {
+            pipeline::Figures::Skipped
+        },
     )
     .map_err(|e| JsError::new(&format!("{file_name}: {e}")))?;
 

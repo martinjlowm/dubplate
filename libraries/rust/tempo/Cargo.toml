@@ -10,6 +10,7 @@ path = "src/lib.rs"
 [dependencies]
 serde.workspace = true
 diagnostics.workspace = true
+goertzel.workspace = true
 
 [dev-dependencies]
 audio.workspace = true

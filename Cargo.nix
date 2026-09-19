@@ -103,6 +103,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "goertzel" = rec {
+      packageId = "goertzel";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "goertzel";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "image" = rec {
       packageId = "image";
       build = internal.buildRustCrateWithFeatures {
@@ -1515,6 +1525,13 @@ rec {
         ];
 
       };
+      "goertzel" = rec {
+        crateName = "goertzel";
+        version = "0.1.0";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./libraries/rust/goertzel; };
+
+      };
       "hashbrown 0.16.1" = rec {
         crateName = "hashbrown";
         version = "0.16.1";
@@ -2787,7 +2804,7 @@ rec {
         features = {
           "default" = [ "avx" "sse" "neon" ];
         };
-        resolvedDefaultFeatures = [ "avx" "default" "neon" "sse" ];
+        resolvedDefaultFeatures = [ "avx" "default" "neon" "sse" "wasm_simd" ];
       };
       "rustversion" = rec {
         crateName = "rustversion";
@@ -3046,6 +3063,12 @@ rec {
           {
             name = "rustfft";
             packageId = "rustfft";
+          }
+          {
+            name = "rustfft";
+            packageId = "rustfft";
+            target = { target, features }: ("wasm32" == target."arch" or null);
+            features = [ "wasm_simd" ];
           }
         ];
         devDependencies = [
@@ -3718,6 +3741,10 @@ rec {
           {
             name = "diagnostics";
             packageId = "diagnostics";
+          }
+          {
+            name = "goertzel";
+            packageId = "goertzel";
           }
           {
             name = "serde";

@@ -36,25 +36,31 @@ pub fn figures(outcome: &Outcome, plot_start: f64, plot_window: f64) -> Artefact
     let mut figures = Vec::new();
 
     let mut artefacts = Artefacts::default();
-    artefacts.binary.push((
-        "spectrogram.png".into(),
-        // The encoder writes to a Vec, so this cannot fail for a reason a caller
-        // could act on.
-        outcome
-            .spectrogram
-            .to_png_bytes()
-            .expect("a PNG encoder writing to memory"),
-    ));
-    let spectrogram = outcome.spectrogram.to_svg("spectrogram.png");
-    artefacts
-        .text
-        .push(("spectrogram.svg".into(), spectrogram.clone()));
-    figures.push(Figure {
-        caption: "Spectrogram".into(),
-        file: "spectrogram.svg".into(),
-        note: "Time against frequency, on a logarithmic frequency axis. Horizontal bands are sustained tones, vertical stripes are onsets, and a flat ceiling across the top marks the cutoff of a lossy source.".into(),
-        inline: Some(spectrogram),
-    });
+
+    // Absent when the run was asked for `Figures::Skipped`, which is the one
+    // figure a caller can decline. Everything below is drawn from the report
+    // and from curves the tempo estimate needed anyway, so those cost nothing
+    // to have kept.
+    if let Some(heatmap) = &outcome.spectrogram {
+        artefacts.binary.push((
+            "spectrogram.png".into(),
+            // The encoder writes to a Vec, so this cannot fail for a reason a
+            // caller could act on.
+            heatmap
+                .to_png_bytes()
+                .expect("a PNG encoder writing to memory"),
+        ));
+        let spectrogram = heatmap.to_svg("spectrogram.png");
+        artefacts
+            .text
+            .push(("spectrogram.svg".into(), spectrogram.clone()));
+        figures.push(Figure {
+            caption: "Spectrogram".into(),
+            file: "spectrogram.svg".into(),
+            note: "Time against frequency, on a logarithmic frequency axis. Horizontal bands are sustained tones, vertical stripes are onsets, and a flat ceiling across the top marks the cutoff of a lossy source.".into(),
+            inline: Some(spectrogram),
+        });
+    }
 
     artefacts.text.push((
         "spectrum.svg".into(),
