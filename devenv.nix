@@ -8,6 +8,23 @@
   # not depend on the caller's flake registry.
   crate2nix = inputs.crate2nix.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
+  # A compiler that can target wasm32, and the archiver that goes with it.
+  #
+  # cc-rs picks the C compiler for whatever target it is building for, and the
+  # SQLite the Engine exporter compiles is C. Left to find one itself it takes
+  # whatever the shell calls `cc`: clang on a macOS shell, which can target
+  # wasm32, and gcc on a Linux one, which cannot. gcc pulls in the host's glibc
+  # headers and dies on `__GLIBC_USE`, which is why `just check-wasm` passed on a
+  # laptop and had never once passed in CI.
+  #
+  # Unwrapped, on the wrapper's own advice when it is handed a target that is
+  # not the host: "cc-wrapper is currently not designed with multi-target
+  # compilers in mind. You may want to use an un-wrapped compiler instead."
+  # Unwrapped also means no hardening flags reach a build that refuses several
+  # of them, which is what the recipe used to work around by hand.
+  wasmClang = pkgs.llvmPackages.clang-unwrapped;
+  wasmBintools = pkgs.llvmPackages.bintools-unwrapped;
+
   # nixpkgs with rust-overlay, which is what supplies `rust-bin`. devenv's own
   # `pkgs` has no overlay applied, so the toolchain is resolved through this one.
   rustPkgs = import inputs.nixpkgs {
@@ -90,6 +107,13 @@ in {
     # definition directly.
     pkgs.bun
   ];
+
+  # Named per target, so they steer the wasm build and leave every native build
+  # to the shell's own compiler.
+  env = {
+    CC_wasm32_unknown_unknown = "${wasmClang}/bin/clang";
+    AR_wasm32_unknown_unknown = "${wasmBintools}/bin/llvm-ar";
+  };
 
   # `treefmt` on PATH in the shell. The formatter set lives in ./treefmt.nix and
   # is imported rather than restated, so the shell and CI cannot drift apart.

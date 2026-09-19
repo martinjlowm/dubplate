@@ -61,16 +61,15 @@ fmt-check:
 # A `std::fs` call or a clock reads fine on a laptop and panics in a tab, and the
 # compiler is the only thing that catches the difference.
 #
-# The hardening list is nixpkgs minus `zerocallusedregs`. Its clang wrapper adds
-# `-fzero-call-used-regs=used-gpr` by default, clang refuses that option for a
-# wasm target, and the SQLite the Engine exporter compiles is the C that trips
-# over it.
+# The C this compiles is the Engine exporter's SQLite, and `devenv.nix` names
+# the compiler and archiver it is built with: an unwrapped clang, because the
+# one a shell calls `cc` is gcc on Linux and gcc cannot target wasm32. Nothing
+# is set here, so the recipe says the same thing from any shell that has them.
 #
 # One crate rather than a list: `dubplate-wasm` depends on every library that has
 # to reach a tab, so adding one to it is what puts it under this gate.
 check-wasm:
-    NIX_HARDENING_ENABLE="fortify stackprotector pic strictoverflow format relro bindnow" \
-        cargo check --release --target wasm32-unknown-unknown -p dubplate-wasm
+    cargo check --release --target wasm32-unknown-unknown -p dubplate-wasm
 
 # Regenerate .github/workflows from infrastructure/ci-cd/main.ts (cdkactions)
 synth-workflows:
