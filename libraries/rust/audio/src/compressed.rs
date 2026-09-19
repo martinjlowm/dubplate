@@ -30,16 +30,20 @@ impl Audio {
     ///
     /// `file_name` is a hint only. Symphonia probes the bytes; the extension
     /// breaks a tie sooner than the probe does, and a wrong one costs nothing.
-    pub fn from_encoded_bytes(bytes: &[u8], file_name: &str) -> Result<Self, DecodeError> {
+    ///
+    /// The bytes are taken by value because symphonia reads through a
+    /// `MediaSource`, which is `Send + Sync` and so cannot borrow. Handed a
+    /// slice, this copied the whole file to satisfy that, and a browser
+    /// analysing a ninety-megabyte track paid for it twice: once crossing the
+    /// boundary and once here.
+    pub fn from_encoded(bytes: Vec<u8>, file_name: &str) -> Result<Self, DecodeError> {
         let mut hint = Hint::new();
         if let Some((_, extension)) = file_name.rsplit_once('.') {
             hint.with_extension(extension);
         }
 
-        let stream = MediaSourceStream::new(
-            Box::new(std::io::Cursor::new(bytes.to_vec())),
-            Default::default(),
-        );
+        let stream =
+            MediaSourceStream::new(Box::new(std::io::Cursor::new(bytes)), Default::default());
         let mut format = symphonia::default::get_probe()
             .probe(
                 &hint,

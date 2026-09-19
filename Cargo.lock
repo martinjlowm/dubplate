@@ -352,6 +352,7 @@ dependencies = [
  "console_error_panic_hook",
  "engine",
  "image",
+ "js-sys",
  "key-detect",
  "pipeline",
  "rekordbox",
@@ -360,6 +361,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_json",
  "wasm-bindgen",
+ "web-sys",
  "zip",
 ]
 
@@ -1392,6 +1394,16 @@ dependencies = [
  "audio",
  "deku",
  "serde",
+]
+
+[[package]]
+name = "web-sys"
+version = "0.3.104"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c435338968042f4f59a557f690a253676d47ce13ceb55d70100e7facf6620a30"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]

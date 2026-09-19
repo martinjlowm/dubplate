@@ -1,11 +1,17 @@
-//! A FAT32 filesystem, built in memory, that a player will mount.
+//! A FAT32 filesystem, built where the caller puts it, that a player will mount.
 //!
 //! `nix/device.nix` does this with `truncate`, `mkfs.vfat` and `mcopy`, which is
 //! the right answer when there is a shell. In a browser there is not, and the
 //! image is the thing the person actually wanted: a file to write to a stick.
 //! So the same layout is built here, in Rust, from the same two inputs the Nix
-//! builder uses. The databases and the audio arrive as bytes and leave as one
-//! `.img`.
+//! builder uses.
+//!
+//! [`build`] holds the whole image in a `Vec`, which is what a test wants and
+//! what a caller with a few megabytes of audio wants. [`build_into`] writes it
+//! through [`std::io`] instead, so a collection larger than the address space
+//! can be assembled: a browser hands it a file in the origin-private
+//! filesystem and never holds an image, or a track, in wasm memory. Neither
+//! function opens anything; the storage and the audio are arguments.
 //!
 //! FAT32 because that is what a CDJ mounts. Denon players read exFAT as well,
 //! but a stick that works in either booth is FAT32, and its four-gigabyte file
@@ -18,7 +24,7 @@
 
 use collection::sink::Memory;
 use fatfs::{FatType, FileSystem, FormatVolumeOptions, FsOptions};
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 /// Where audio sits on the device, as a directory name.
 pub const CONTENTS: &str = "Contents";
@@ -60,14 +66,60 @@ impl From<std::io::Error> for Error {
     }
 }
 
-/// One audio file as it will sit on the device.
+/// One audio file as it will sit on the device, held in memory.
 pub struct Audio {
     /// The name under `/Contents`, which is what both databases stored.
     pub file_name: String,
     pub bytes: Vec<u8>,
 }
 
-/// Build the image.
+/// Where the audio comes from while the image is written.
+///
+/// Two calls rather than a slice of buffers, because the volume is formatted
+/// before a single track goes into it and the length of the payload is what
+/// decides how many sectors it has. A caller holding every track in memory
+/// answers both from the same `Vec`. A caller reading a browser's
+/// origin-private filesystem answers `listing` from what it recorded when it
+/// extracted each track, and `write` by streaming one file, so a thirty-track
+/// collection never holds more than one track's bytes.
+pub trait Tracks {
+    /// The name and length of every file to place under `/Contents`, in the
+    /// order they are written.
+    fn listing(&self) -> Vec<(String, u64)>;
+
+    /// Write the bytes of the file `listing` gave at `index`.
+    fn write(&mut self, index: usize, into: &mut dyn Write) -> std::io::Result<()>;
+}
+
+impl Tracks for &[Audio] {
+    fn listing(&self) -> Vec<(String, u64)> {
+        self.iter()
+            .map(|track| (track.file_name.clone(), track.bytes.len() as u64))
+            .collect()
+    }
+
+    fn write(&mut self, index: usize, into: &mut dyn Write) -> std::io::Result<()> {
+        into.write_all(&self[index].bytes)
+    }
+}
+
+/// How many bytes a volume holding this payload needs.
+///
+/// A caller writing into a file allocates exactly this much before calling
+/// [`build_into`]: FAT32 describes a fixed number of sectors, and the number of
+/// sectors comes from the length of what it is written into.
+pub fn size(device: &Memory, audio_bytes: u64) -> u64 {
+    let payload = device.len() as u64 + audio_bytes;
+    // Rounded up to a whole sector. A raw image is a disk, and a disk is a
+    // number of sectors: macOS will not attach one whose length is not, and the
+    // bytes past the last sector are outside the volume the BPB describes
+    // anyway. Unrounded, this left up to 511 bytes hanging off the end.
+    (payload * (100 + SLACK_PERCENT) / 100 + SLACK_BYTES)
+        .max(MINIMUM_BYTES)
+        .next_multiple_of(SECTOR_BYTES)
+}
+
+/// Build the image and hand back its bytes.
 ///
 /// `device` is what the two exporters wrote: `PIONEER/…` and
 /// `Engine Library/…`, with their paths already device-relative. `audio` is
@@ -77,25 +129,50 @@ pub struct Audio {
 /// list. FAT32 allows eleven characters and the name is truncated to fit rather
 /// than refused.
 pub fn build(device: &Memory, audio: &[Audio], label: &str) -> Result<Vec<u8>, Error> {
-    let payload: u64 =
-        device.len() as u64 + audio.iter().map(|a| a.bytes.len() as u64).sum::<u64>();
-    // Rounded up to a whole sector. A raw image is a disk, and a disk is a
-    // number of sectors: macOS will not attach one whose length is not, and the
-    // bytes past the last sector are outside the volume the BPB describes
-    // anyway. Unrounded, this left up to 511 bytes hanging off the end.
-    let size = (payload * (100 + SLACK_PERCENT) / 100 + SLACK_BYTES)
-        .max(MINIMUM_BYTES)
-        .next_multiple_of(SECTOR_BYTES);
+    let audio_bytes = audio.iter().map(|track| track.bytes.len() as u64).sum();
+    let mut storage = Cursor::new(vec![0u8; size(device, audio_bytes) as usize]);
+    let mut tracks = audio;
+    build_into(&mut storage, device, &mut tracks, label)?;
+    Ok(storage.into_inner())
+}
 
-    // With the `std` feature fatfs reads and writes through `std::io`, so a cursor
-    // over a buffer is a disk as far as it is concerned.
-    let mut storage = Cursor::new(vec![0u8; size as usize]);
+/// Build the image into `storage`, which is already [`size`] bytes long and
+/// reads as zeroes.
+///
+/// The length is an input rather than a parameter: `fatfs` counts the sectors
+/// it was handed rather than being told how many to make, so a caller that
+/// allocated too little gets a volume it cannot fill. That is caught here, with
+/// both numbers, rather than as a write failing part way through the audio.
+///
+/// Zeroes because the free clusters are the one part of the volume nothing
+/// writes, and leftovers in them are what make one collection build to two
+/// different images.
+pub fn build_into<S, T>(
+    storage: &mut S,
+    device: &Memory,
+    audio: &mut T,
+    label: &str,
+) -> Result<(), Error>
+where
+    S: Read + Write + Seek,
+    T: Tracks + ?Sized,
+{
+    let listing = audio.listing();
+    let payload = device.len() as u64 + listing.iter().map(|(_, size)| *size).sum::<u64>();
+    let length = storage.seek(SeekFrom::End(0))?;
+    if length < payload {
+        return Err(Error(format!(
+            "the image is {length} bytes and the files to write into it are {payload}"
+        )));
+    }
+    storage.seek(SeekFrom::Start(0))?;
+
     let mut volume_label = [b' '; 11];
     for (slot, byte) in volume_label.iter_mut().zip(label.bytes()) {
         *slot = byte.to_ascii_uppercase();
     }
     fatfs::format_volume(
-        &mut storage,
+        &mut *storage,
         FormatVolumeOptions::new()
             .fat_type(FatType::Fat32)
             .volume_id(VOLUME_ID)
@@ -105,7 +182,7 @@ pub fn build(device: &Memory, audio: &[Audio], label: &str) -> Result<Vec<u8>, E
 
     {
         // Every timestamp the epoch, so the same collection is the same bytes.
-        let filesystem = FileSystem::new(&mut storage, FsOptions::new().time_provider(&EPOCH))
+        let filesystem = FileSystem::new(&mut *storage, FsOptions::new().time_provider(&EPOCH))
             .map_err(|e| Error(format!("could not open the filesystem just made: {e}")))?;
         {
             let root = filesystem.root_dir();
@@ -114,14 +191,12 @@ pub fn build(device: &Memory, audio: &[Audio], label: &str) -> Result<Vec<u8>, E
             // which is the order the Nix builder uses and the order that keeps
             // the small files near the front of the volume.
             for (path, bytes) in &device.files {
-                write_file(&root, path, bytes)?;
+                write_file(&root, path, |file| file.write_all(bytes))?;
             }
-            for track in audio {
-                write_file(
-                    &root,
-                    &format!("{CONTENTS}/{}", track.file_name),
-                    &track.bytes,
-                )?;
+            for (index, (file_name, _)) in listing.iter().enumerate() {
+                write_file(&root, &format!("{CONTENTS}/{file_name}"), |file| {
+                    audio.write(index, file)
+                })?;
             }
         }
 
@@ -130,18 +205,21 @@ pub fn build(device: &Memory, audio: &[Audio], label: &str) -> Result<Vec<u8>, E
             .map_err(|e| Error(format!("the filesystem would not close cleanly: {e}")))?;
     }
 
-    let mut image = storage.into_inner();
-    repair_dot_entries(&mut image)?;
-    Ok(image)
+    repair_dot_entries(storage)
 }
 
 /// Write one file, making the directories its path names.
 ///
 /// `create_dir` on a directory that exists is not an error in this crate, which
 /// is what lets every file just declare its whole path.
-fn write_file<T>(root: &fatfs::Dir<'_, T>, path: &str, bytes: &[u8]) -> Result<(), Error>
+///
+/// The bytes arrive through a closure rather than as a slice so that a caller
+/// streaming a track does not have to hold it: what it writes lands in the
+/// image a buffer at a time.
+fn write_file<T, F>(root: &fatfs::Dir<'_, T>, path: &str, write: F) -> Result<(), Error>
 where
     T: fatfs::ReadWriteSeek,
+    F: FnOnce(&mut dyn Write) -> std::io::Result<()>,
 {
     let path = path.trim_start_matches('/');
     let (directories, name) = match path.rsplit_once('/') {
@@ -168,8 +246,7 @@ where
         .map_err(|e| Error(format!("could not create {path}: {e}")))?;
     file.truncate()
         .map_err(|e| Error(format!("could not truncate {path}: {e}")))?;
-    file.write_all(bytes)
-        .map_err(|e| Error(format!("could not write {path}: {e}")))?;
+    write(&mut file).map_err(|e| Error(format!("could not write {path}: {e}")))?;
     Ok(())
 }
 
@@ -193,8 +270,12 @@ where
 ///
 /// The long entries become deleted slots rather than free ones. A free slot is
 /// where a reader stops, so blanking them would truncate the directory instead.
-fn repair_dot_entries(image: &mut [u8]) -> Result<(), Error> {
-    let boot = Boot::read(image)?;
+///
+/// The pass reads and writes through seeks rather than over a slice, because
+/// the image it walks may be a file the size of a stick rather than a buffer.
+/// Nothing larger than one cluster is held at a time.
+fn repair_dot_entries<S: Read + Write + Seek>(storage: &mut S) -> Result<(), Error> {
+    let boot = Boot::read(storage)?;
 
     let mut pending = vec![boot.root_cluster];
     let mut seen = std::collections::HashSet::new();
@@ -204,11 +285,18 @@ fn repair_dot_entries(image: &mut [u8]) -> Result<(), Error> {
             continue;
         }
         if start != boot.root_cluster {
-            boot.repair(image, start);
+            boot.repair(storage, start)?;
         }
-        pending.extend(boot.children(image, start));
+        pending.extend(boot.children(storage, start)?);
     }
 
+    Ok(())
+}
+
+/// Read `into.len()` bytes from `at`.
+fn read_at<S: Read + Seek>(storage: &mut S, at: u64, into: &mut [u8]) -> Result<(), Error> {
+    storage.seek(SeekFrom::Start(at))?;
+    storage.read_exact(into)?;
     Ok(())
 }
 
@@ -228,25 +316,33 @@ struct Boot {
     fats: u64,
     sectors_per_fat: u64,
     root_cluster: u32,
+    /// The length of the image, which bounds every offset this pass computes
+    /// out of the FAT. A slice answered that question by itself.
+    length: u64,
 }
 
 impl Boot {
-    fn read(image: &[u8]) -> Result<Self, Error> {
-        if image.len() < 512 {
+    fn read<S: Read + Seek>(storage: &mut S) -> Result<Self, Error> {
+        let length = storage.seek(SeekFrom::End(0))?;
+        if length < SECTOR_BYTES {
             return Err(Error("the image is too small to hold a boot sector".into()));
         }
-        let at16 = |at: usize| u64::from(u16::from_le_bytes([image[at], image[at + 1]]));
+        let mut sector = [0u8; SECTOR_BYTES as usize];
+        read_at(storage, 0, &mut sector)?;
+
+        let at16 = |at: usize| u64::from(u16::from_le_bytes([sector[at], sector[at + 1]]));
         let at32 = |at: usize| {
-            u32::from_le_bytes([image[at], image[at + 1], image[at + 2], image[at + 3]])
+            u32::from_le_bytes([sector[at], sector[at + 1], sector[at + 2], sector[at + 3]])
         };
 
         let boot = Boot {
             bytes_per_sector: at16(0x0B),
-            sectors_per_cluster: u64::from(image[0x0D]),
+            sectors_per_cluster: u64::from(sector[0x0D]),
             reserved_sectors: at16(0x0E),
-            fats: u64::from(image[0x10]),
+            fats: u64::from(sector[0x10]),
             sectors_per_fat: u64::from(at32(0x24)),
             root_cluster: at32(0x2C),
+            length,
         };
 
         if boot.bytes_per_sector == 0 || boot.sectors_per_cluster == 0 || boot.root_cluster < 2 {
@@ -258,11 +354,11 @@ impl Boot {
     }
 
     /// Where a cluster's data starts.
-    fn offset(&self, cluster: u32) -> usize {
+    fn offset(&self, cluster: u32) -> u64 {
         let sector = self.reserved_sectors
             + self.fats * self.sectors_per_fat
             + (u64::from(cluster) - 2) * self.sectors_per_cluster;
-        (sector * self.bytes_per_sector) as usize
+        sector * self.bytes_per_sector
     }
 
     fn cluster_bytes(&self) -> usize {
@@ -270,41 +366,47 @@ impl Boot {
     }
 
     /// The next cluster in a chain, while the chain continues.
-    fn next(&self, image: &[u8], cluster: u32) -> Option<u32> {
-        let at = (self.reserved_sectors * self.bytes_per_sector) as usize + cluster as usize * 4;
-        let slot = image.get(at..at + 4)?;
-        let entry = u32::from_le_bytes([slot[0], slot[1], slot[2], slot[3]]) & 0x0FFF_FFFF;
-        (2..0x0FFF_FFF7).contains(&entry).then_some(entry)
+    fn next<S: Read + Seek>(&self, storage: &mut S, cluster: u32) -> Result<Option<u32>, Error> {
+        let at = self.reserved_sectors * self.bytes_per_sector + u64::from(cluster) * 4;
+        if at + 4 > self.length {
+            return Ok(None);
+        }
+        let mut slot = [0u8; 4];
+        read_at(storage, at, &mut slot)?;
+        let entry = u32::from_le_bytes(slot) & 0x0FFF_FFFF;
+        Ok((2..0x0FFF_FFF7).contains(&entry).then_some(entry))
     }
 
     /// Every cluster a directory occupies, in order.
-    fn chain(&self, image: &[u8], start: u32) -> Vec<u32> {
+    fn chain<S: Read + Seek>(&self, storage: &mut S, start: u32) -> Result<Vec<u32>, Error> {
         let mut chain = vec![start];
         let mut at = start;
         // Bounded by what the image could hold, so a FAT pointing back into its
         // own chain stops here rather than running forever.
-        let limit = image.len() / self.cluster_bytes().max(1) + 2;
-        while let Some(next) = self.next(image, at) {
+        let limit = (self.length / self.cluster_bytes().max(1) as u64 + 2) as usize;
+        while let Some(next) = self.next(storage, at)? {
             if chain.len() > limit || chain.contains(&next) {
                 break;
             }
             chain.push(next);
             at = next;
         }
-        chain
+        Ok(chain)
     }
 
     /// The first cluster of every subdirectory this one holds.
-    fn children(&self, image: &[u8], start: u32) -> Vec<u32> {
+    fn children<S: Read + Seek>(&self, storage: &mut S, start: u32) -> Result<Vec<u32>, Error> {
         let mut children = Vec::new();
-        for cluster in self.chain(image, start) {
+        let mut data = vec![0u8; self.cluster_bytes()];
+        for cluster in self.chain(storage, start)? {
             let base = self.offset(cluster);
-            let Some(data) = image.get(base..base + self.cluster_bytes()) else {
+            if base + data.len() as u64 > self.length {
                 continue;
-            };
+            }
+            read_at(storage, base, &mut data)?;
             for slot in data.chunks_exact(ENTRY) {
                 match slot[0] {
-                    0 => return children,
+                    0 => return Ok(children),
                     DELETED => continue,
                     _ => {}
                 }
@@ -321,16 +423,18 @@ impl Boot {
                 }
             }
         }
-        children
+        Ok(children)
     }
 
     /// Rewrite one directory's opening four slots, if they are the shape
     /// `fatfs` leaves behind. Anything else is left alone.
-    fn repair(&self, image: &mut [u8], cluster: u32) {
+    fn repair<S: Read + Write + Seek>(&self, storage: &mut S, cluster: u32) -> Result<(), Error> {
         let base = self.offset(cluster);
-        let Some(slots) = image.get_mut(base..base + 4 * ENTRY) else {
-            return;
-        };
+        let mut slots = [0u8; 4 * ENTRY];
+        if base + slots.len() as u64 > self.length {
+            return Ok(());
+        }
+        read_at(storage, base, &mut slots)?;
 
         let long = |slot: &[u8]| slot[11] == ATTR_LONG_NAME;
         let dot = |slot: &[u8], name: &[u8]| {
@@ -341,7 +445,7 @@ impl Boot {
             && long(&slots[2 * ENTRY..3 * ENTRY])
             && dot(&slots[3 * ENTRY..4 * ENTRY], b"..         "))
         {
-            return;
+            return Ok(());
         }
 
         let here: [u8; ENTRY] = slots[ENTRY..2 * ENTRY].try_into().expect("one entry");
@@ -362,6 +466,10 @@ impl Boot {
             slot.fill(0);
             slot[0] = DELETED;
         }
+
+        storage.seek(SeekFrom::Start(base))?;
+        storage.write_all(&slots)?;
+        Ok(())
     }
 }
 
@@ -402,7 +510,7 @@ impl fatfs::TimeProvider for Epoch {
 
 #[cfg(test)]
 mod tests {
-    use super::{Audio, CONTENTS, build};
+    use super::{Audio, CONTENTS, Tracks, build, build_into, size};
     use collection::Sink;
     use collection::sink::Memory;
 
@@ -534,6 +642,87 @@ mod tests {
         for slot in dir[64..128].chunks_exact(32) {
             assert_eq!(slot[0], 0xE5, "the slot the long name left is not deleted");
         }
+    }
+
+    /// Streaming the audio in builds the same volume as handing it over whole.
+    ///
+    /// `build_into` is what a browser calls, and the file it streams out of is
+    /// the one thing this crate cannot hold a copy of to compare. A reader over
+    /// the same bytes stands in: if the image differs, the difference is in how
+    /// the bytes were written rather than in what they were. One byte per
+    /// write, so a builder that assumed one write per file fails here.
+    #[test]
+    fn streaming_the_audio_builds_the_same_image() {
+        struct Streamed(Vec<(String, Vec<u8>)>);
+
+        impl Tracks for Streamed {
+            fn listing(&self) -> Vec<(String, u64)> {
+                self.0
+                    .iter()
+                    .map(|(name, bytes)| (name.clone(), bytes.len() as u64))
+                    .collect()
+            }
+
+            fn write(
+                &mut self,
+                index: usize,
+                into: &mut dyn std::io::Write,
+            ) -> std::io::Result<()> {
+                for byte in &self.0[index].1 {
+                    into.write_all(&[*byte])?;
+                }
+                Ok(())
+            }
+        }
+
+        let name = "126_05A_Lange-Out_Of_The_Sky.flac";
+        let bytes: Vec<u8> = (0..40_000u32).map(|n| n as u8).collect();
+        let whole = build(
+            &device(),
+            &[Audio {
+                file_name: name.into(),
+                bytes: bytes.clone(),
+            }],
+            "MUSIC",
+        )
+        .unwrap();
+
+        let mut tracks = Streamed(vec![(name.into(), bytes.clone())]);
+        let mut storage =
+            std::io::Cursor::new(vec![0u8; size(&device(), bytes.len() as u64) as usize]);
+        build_into(&mut storage, &device(), &mut tracks, "MUSIC").unwrap();
+
+        let streamed = storage.into_inner();
+        assert_eq!(
+            streamed.len(),
+            whole.len(),
+            "{} bytes streamed against {} held",
+            streamed.len(),
+            whole.len()
+        );
+        assert_eq!(
+            streamed.iter().zip(&whole).position(|(a, b)| a != b),
+            None,
+            "the two images differ"
+        );
+    }
+
+    /// Storage shorter than the payload is refused before it is formatted.
+    ///
+    /// `fatfs` counts the sectors it was handed, so the alternative is a volume
+    /// that formats, half fills, and fails on a track with no space left.
+    #[test]
+    fn storage_too_small_for_the_payload_says_both_numbers() {
+        let audio = [Audio {
+            file_name: "128_08A_Track.wav".into(),
+            bytes: vec![3u8; 8192],
+        }];
+        let mut storage = std::io::Cursor::new(vec![0u8; 4096]);
+        let mut tracks: &[Audio] = &audio;
+        let error = build_into(&mut storage, &device(), &mut tracks, "MUSIC")
+            .expect_err("a 4 KB image accepted 8 KB of audio")
+            .0;
+        assert!(error.contains("4096") && error.contains("8204"), "{error}");
     }
 
     /// The repair leaves the filesystem readable, which is the point of doing it
