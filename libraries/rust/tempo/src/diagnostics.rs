@@ -179,6 +179,24 @@ pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
         ));
     }
 
+    // The band between a grid that describes nothing and one that describes the
+    // track. `grid-misfit` speaks for the first; this speaks for an answer that
+    // stands on a grid fitting loosely. Across the working set a level that is
+    // right puts 90% or more of its beats on an onset, and one reaching three
+    // quarters is thin evidence whatever its salience says. Music played to no
+    // click is what produced it here, which is also where the octave is hardest
+    // to read.
+    if (0.5..0.8).contains(&analysis.grid.matched_fraction) {
+        out.push(Diagnostic::warning(
+            "loose-grid",
+            format!(
+                "{:.0}% of beats land within {:.0} ms of an onset, where a programmed track reaches 90%; the level rests on a grid that fits loosely, so read the octave relatives before trusting it",
+                analysis.grid.matched_fraction * 100.0,
+                analysis.grid.tolerance_ms
+            ),
+        ));
+    }
+
     if analysis.stability.interquartile_range_bpm > 2.0 {
         out.push(Diagnostic::warning(
             "unstable-tempo",

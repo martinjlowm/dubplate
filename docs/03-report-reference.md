@@ -49,7 +49,7 @@ Runs shorter than 30 seconds of audio are refused rather than answered.
 | `--bpm-resolution <N>` | `0.1` | Grid spacing. The answer is refined between grid points, so this sets search cost rather than precision. |
 | `--pulses <N>` | `4` | Comb teeth, weighted 1/k. |
 | `--comb-penalty <0..1>` | `0` | Weight of the penalty subtracted halfway between teeth. |
-| `--metrical-floor <N>` | `90` | Slowest level the answer may be reported at. `0` disables the doubling. |
+| `--metrical-floor <N>` | `80` | Slowest level the answer may be reported at. `0` disables the doubling. |
 | `--metrical-floor-ratio <0..1>` | `0.5` | How strong the doubled candidate must be, relative to the original, for the doubling to happen. |
 | `--integer-snap <N>` | `0.25` | Largest gap, in BPM, the answer may be moved by to land on a whole number. `0.5` rounds every measurement, `0` reports the measurement. A measurement further from an integer than this keeps its decimals and raises `non-integer-tempo`. |
 | `--tempo-prior <N>` | off | Centre of a log-normal prior over tempo, in BPM. |
@@ -200,6 +200,7 @@ and changes nothing.
 | `close-runner-up` | warning | The second candidate scores 85% or more of the first and is not an octave relative of the answer. |
 | `estimators-disagree` | warning | The Fourier tempogram peaks more than 1% away from the autocorrelation answer. |
 | `weak-pulse` | warning | `grid.pulse_ratio` is under 1.5. |
+| `loose-grid` | warning | Between half and 80% of beats found an onset within the tolerance: the answer stands but the grid fits loosely. |
 | `grid-misfit` | warning | Fewer than half the beats found an onset within tolerance. |
 | `unstable-tempo` | warning | Window estimates spread over more than 2 BPM. |
 | `prior-changed-answer` | warning | With the prior off, a different tempo wins by more than 1 BPM. |

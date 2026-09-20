@@ -44,6 +44,14 @@ pub struct AnalysisOptions {
     pub comb_penalty: f64,
     /// Slowest metrical level the answer may be reported at, in BPM. At 0 the
     /// salience curve's own answer stands, subharmonic and all.
+    ///
+    /// 80 rather than 90, because 90 sat on a tempo people write music at. A
+    /// track measured at 89.99 was doubled to 179.96 by a constant it missed by
+    /// a hundredth of a BPM, and the salience curve had preferred the 89.99.
+    /// The levels this rule exists to lift sit far below that: across the
+    /// working set the answers it doubles measure 61.00, 62.50, 62.50, 63.02,
+    /// 68.97 and 71.01, so 80 leaves nine BPM of room on both sides where 90
+    /// left a hundredth on one.
     pub metrical_floor: f64,
     /// How strong the doubled candidate must be, relative to the original, for
     /// the metrical floor to double it.
@@ -74,7 +82,7 @@ impl Default for AnalysisOptions {
             bpm_resolution: 0.1,
             pulses: 4,
             comb_penalty: 0.0,
-            metrical_floor: 90.0,
+            metrical_floor: 80.0,
             metrical_floor_ratio: 0.5,
             integer_snap: 0.25,
             tempo_prior: None,
