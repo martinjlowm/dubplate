@@ -114,18 +114,13 @@ pub struct AnalysisArgs {
     #[arg(long, default_value_t = AnalysisOptions::default().integer_snap)]
     pub integer_snap: f64,
 
-    /// Centre of a log-normal tempo prior, in BPM. Off unless given, because a
-    /// prior is how a detector reports the tempo it expected.
-    #[arg(long)]
-    pub tempo_prior: Option<f64>,
-
     /// Width of the tempo prior, in octaves.
     #[arg(long, default_value_t = AnalysisOptions::default().tempo_prior_width)]
     pub tempo_prior_width: f64,
 
-    /// Let the measured energy choose the tempo prior, by band. Off unless
-    /// asked for, and `--tempo-prior` outranks it.
-    #[arg(long)]
+    /// Report the salience curve's own answer, with no prior from the energy
+    /// bands. The report carries that ranking either way.
+    #[arg(long = "no-energy-bands", action = clap::ArgAction::SetFalse)]
     pub energy_bands: bool,
 
     /// Key profile to correlate the chroma against.
@@ -153,7 +148,6 @@ impl From<&AnalysisArgs> for AnalysisOptions {
             metrical_floor: args.metrical_floor,
             metrical_floor_ratio: args.metrical_floor_ratio,
             integer_snap: args.integer_snap,
-            tempo_prior: args.tempo_prior,
             tempo_prior_width: args.tempo_prior_width,
             energy_bands: args.energy_bands,
             key_profile: args.key_profile,

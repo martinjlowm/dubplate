@@ -54,16 +54,18 @@ edit to `Cargo.toml`.
    tool exists to troubleshoot.
 2. **Diagnostics never change the answer.** They read what the stage already produced. A rule
    that adjusts a result is not a diagnostic.
-3. **No tempo prior by default.** A prior improves the average case and is exactly how a
-   174 BPM track gets reported as 87. `--tempo-prior` switches it on, and the report then
-   carries the ranking it would have produced without one. `--energy-bands` is the same
-   switch driven by a measurement rather than by a number the caller picked: the energy in
-   `libraries/rust/energy` puts a track in one of three bands and each band names a prior.
-   It is off for the same reason, it emits `energy-band-applied` whenever it chooses one,
-   and its weights read nothing the tempo stage touches, because a track reported at twice
-   its tempo would otherwise carry that error into the measurement meant to catch it. On the
-   working set it corrects two tracks and moves nothing else, which is two examples and not
-   a proof.
+3. **The caller never names a tempo.** A prior improves the average case and is exactly how
+   a 174 BPM track gets reported as 87, so there is no `--tempo-prior`: a number a person
+   picks is a guess about the answer, and this tool exists because guesses about the answer
+   are what go wrong. The prior that is applied is chosen by a measurement. The energy in
+   `libraries/rust/energy` puts a track in one of three bands and each band names a centre,
+   and its four inputs read nothing the tempo stage produces, because a track reported at
+   twice its tempo would otherwise carry that error into the measurement meant to catch it.
+   It is on, it emits `energy-band-applied` whenever it picks a centre, and the report
+   carries `candidates_without_prior` either way. `--no-energy-bands` reports the salience
+   curve's own answer. On the working set the bands correct two tracks, change nothing among
+   the other twenty-one and leave the selftest untouched, which is two examples and not a
+   proof; three of those tracks have a tempo anybody has actually checked.
 4. **The comb penalty defaults to 0.** Subtracting the autocorrelation between comb teeth
    rejects subharmonics, and it fires just as hard on the true tempo of anything with offbeat
    movement. At full weight it reports 106.64 BPM for a 160 BPM hardstyle track. Do not

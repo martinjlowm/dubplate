@@ -227,12 +227,10 @@ pub fn run(
         &broadband.values,
         frame_rate,
     );
-    let prior = match (options.energy_bands, options.tempo_prior) {
-        // An explicit prior is the caller's and outranks the bands.
-        (_, Some(centre)) => Some(centre),
-        (true, None) => measured_energy.band.tempo_prior(),
-        (false, None) => None,
-    };
+    let prior = options
+        .energy_bands
+        .then(|| measured_energy.band.tempo_prior())
+        .flatten();
 
     let settings = TempoSettings {
         min_bpm: options.min_bpm,
@@ -254,7 +252,7 @@ pub fn run(
 
     // A rule that moves the reported number says so, and says what it read to
     // decide. Info rather than warning: the band did what it was asked to.
-    if options.energy_bands && options.tempo_prior.is_none() {
+    if options.energy_bands {
         let centre = measured_energy.band.tempo_prior();
         tempo_analysis.diagnostics.insert(
             0,

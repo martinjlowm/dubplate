@@ -52,9 +52,8 @@ Runs shorter than 30 seconds of audio are refused rather than answered.
 | `--metrical-floor <N>` | `80` | Slowest level the answer may be reported at. `0` disables the doubling. |
 | `--metrical-floor-ratio <0..1>` | `0.5` | How strong the doubled candidate must be, relative to the original, for the doubling to happen. |
 | `--integer-snap <N>` | `0.25` | Largest gap, in BPM, the answer may be moved by to land on a whole number. `0.5` rounds every measurement, `0` reports the measurement. A measurement further from an integer than this keeps its decimals and raises `non-integer-tempo`. |
-| `--tempo-prior <N>` | off | Centre of a log-normal prior over tempo, in BPM. |
-| `--energy-bands` | off | Let the measured energy pick the prior: calm asks for 115 BPM, club for 140, hard for none. `--tempo-prior` outranks it. |
-| `--tempo-prior-width <N>` | `0.7` | Width of that prior, in octaves. |
+| `--no-energy-bands` | bands on | Report the salience curve's own answer. With the bands on, calm asks for a 115 BPM prior, club for 140, hard for none. |
+| `--tempo-prior-width <N>` | `0.7` | Width of the band's prior, in octaves. |
 
 ### Key
 

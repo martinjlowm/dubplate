@@ -60,15 +60,17 @@ pub struct AnalysisOptions {
     pub integer_snap: f64,
     /// Let the measured energy choose the tempo prior.
     ///
-    /// Off, for the reason `tempo_prior` is off: a prior improves the average
-    /// case and is how a fast track gets reported at half. The bands exist so
-    /// that the prior only reaches music whose spectrum says it is slow, and
-    /// they are measured rather than guessed, but they still change the answer
-    /// and still say so when they do.
+    /// On. A prior is how a detector reports the tempo it expected, which is
+    /// why the caller cannot name one: there is no number to pick. The bands
+    /// read `libraries/rust/energy`, which is built from brightness, crest
+    /// factor, onset density and the share above 4 kHz and touches nothing the
+    /// tempo stage produces, so the prior only reaches music whose spectrum
+    /// says it is slow. It still changes the answer, and still says so through
+    /// `energy-band-applied` when it does.
+    ///
+    /// Turn it off to see the salience curve's own answer, which the report
+    /// carries either way as `candidates_without_prior`.
     pub energy_bands: bool,
-    /// Centre of a log-normal tempo prior, in BPM. Off unless set, because a
-    /// prior is how a detector reports the tempo it expected.
-    pub tempo_prior: Option<f64>,
     /// Width of the tempo prior, in octaves.
     pub tempo_prior_width: f64,
     /// Key profile the chroma is correlated against.
@@ -93,8 +95,7 @@ impl Default for AnalysisOptions {
             metrical_floor: 80.0,
             metrical_floor_ratio: 0.5,
             integer_snap: 0.25,
-            energy_bands: false,
-            tempo_prior: None,
+            energy_bands: true,
             tempo_prior_width: 0.7,
             key_profile: Profile::Temperley,
             tuning_cents: None,

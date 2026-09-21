@@ -298,15 +298,18 @@ raises `non-integer-tempo`, which usually means it was played rather than render
 
 ### See what a tempo prior would do
 
-Detectors that report a plausible answer to everything usually have a prior. This one has
-none unless you ask:
+Detectors that report a plausible answer to everything usually have a prior, and it is
+usually a number somebody picked. There is no way to pick one here. A prior is applied,
+but only where a measurement asks for it:
 
 ```sh
-just analyze track.wav --tempo-prior 128 --tempo-prior-width 0.4
+just analyze track.wav --no-energy-bands      # the salience curve's own answer
 ```
 
-The report then carries `candidates_without_prior`, and a `prior-changed-answer` finding
-fires when the prior, rather than the track, picked the winner.
+The energy bands read how hard a track hits and hand the slow end a prior, which is what
+corrects a soul ballad reported at 199 BPM. The report carries `candidates_without_prior`
+either way, `energy-band-applied` names the band and the centre, and `prior-changed-answer`
+fires when the prior rather than the track picked the winner.
 
 ### Check whether a file came from a lossy source
 
@@ -594,12 +597,15 @@ tempi are whole. On one track in the working set that comparison came out 6.38 a
 where before the snap it was 4.98 against 2.26. The pulse ratio still favours the truth, and
 the number that separates the two by an order of magnitude is the Fourier salience.
 
-### No tempo prior unless you ask
+### The prior is measured, not picked
 
 Most detectors weight candidates towards 120 BPM. It improves the average case and it is
-exactly how a 174 BPM drum and bass track gets reported as 87. Here the prior is off, and
-switching it on with `--tempo-prior` makes the report carry the ranking it would have produced
-without one. When the prior rather than the track picked the winner, that is a finding.
+exactly how a 174 BPM drum and bass track gets reported as 87. So there is no flag that
+takes a tempo: a number you pick is a guess about the answer. What decides instead is the
+energy, built from brightness, crest factor, onset density and the share above 4 kHz, none
+of which the tempo stage touches. A track whose spectrum says it is slow gets a prior; a
+hardstyle record gets none. The report carries the ranking it would have produced without
+one, and when the prior rather than the track picked the winner, that is a finding.
 
 ### The findings are not warnings about the tool
 
