@@ -204,6 +204,17 @@ edit to `Cargo.toml`.
     driven to the Folder menu, which is the one place a CDJ ignores the analysis and reads the
     file itself. The rule is the separator: ` - ` when the name has one, a bare hyphen
     otherwise, and a leading run of digits belongs to neither side.
+25. **A table grows into a page it owns, never into the next table's.** The header's entry
+    for each table carries the page a player takes when that table has to grow, and a player
+    takes it at its word. Pointing it at the page after the table points it at the next table's
+    first page: an XDJ-RX3 asked for one page of play history, was handed the page holding
+    `history_entries`, wrote over it, and left two tables claiming one page and a database
+    rekordbox would no longer open. The database was written correctly and destroyed on first
+    use, which is the worst shape a bug of this kind takes, because every check that runs
+    before the stick goes in a player passes. So every table ends with a spare page of 4096
+    zero bytes and points there, which is what both real exports measured here do for every
+    table they leave a page short of full. `no_table_is_told_to_grow_into_another_tables_page`
+    is the test; 80 kB a stick is the cost.
 
 ## 3. What a change to the algorithm has to show
 

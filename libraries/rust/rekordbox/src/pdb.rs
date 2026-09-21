@@ -208,7 +208,7 @@ impl Database {
         for table in &layout.tables {
             front.extend(bytes(&TableEntry {
                 page_type: table.page_type as u32,
-                empty_candidate: (table.last_page + 1) as u32,
+                empty_candidate: table.spare_page as u32,
                 first_page: table.first_page as u32,
                 last_page: table.last_page as u32,
             }));
@@ -239,6 +239,8 @@ impl Database {
                 };
                 out.write_all(&bytes)?;
             }
+            // The spare, which is 4096 zero bytes in every real export.
+            out.write_all(&[0u8; PAGE_SIZE])?;
         }
         Ok(())
     }
@@ -281,10 +283,16 @@ impl Database {
 
             let first_page = next_index;
             next_index += pages.len();
+            // One page this table owns and has not filled, which is what a
+            // player takes when it needs to grow the table. See
+            // [`TablePlan::spare_page`].
+            let spare_page = next_index;
+            next_index += 1;
             tables.push(TablePlan {
                 page_type: *page_type,
                 first_page,
-                last_page: next_index - 1,
+                last_page: spare_page - 1,
+                spare_page,
                 pages,
             });
         }
@@ -305,6 +313,19 @@ struct TablePlan {
     page_type: PageType,
     first_page: usize,
     last_page: usize,
+    /// A page holding nothing, belonging to this table alone.
+    ///
+    /// The header's entry for a table points a player here when the table has
+    /// to grow, and a player takes it at its word. Pointing it at the page
+    /// after the table means pointing it at the next table's first page: an
+    /// XDJ-RX3 asked for one page of play history, was handed the page holding
+    /// `history_entries`, and wrote over it. Two tables then claimed one page
+    /// and rekordbox could no longer read the file.
+    ///
+    /// Every table therefore ends with a spare, the way both real exports
+    /// measured here give one to every table they leave a page short of full.
+    /// 4096 bytes of nothing per table, which is 80 kB on a stick.
+    spare_page: usize,
     pages: Vec<PagePlan>,
 }
 
@@ -511,7 +532,8 @@ struct FileHeader {
 #[deku(endian = "little")]
 struct TableEntry {
     page_type: u32,
-    /// Purpose unknown; rekordbox appears to point it past the table.
+    /// Where a player takes a page from when this table has to grow. Never a
+    /// page another table owns: see [`TablePlan::spare_page`].
     empty_candidate: u32,
     first_page: u32,
     last_page: u32,

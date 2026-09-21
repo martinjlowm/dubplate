@@ -390,6 +390,53 @@ mod against_a_real_export {
         }
     }
 
+    /// The page a player takes when a table has to grow belongs to that table
+    /// and to nothing else.
+    ///
+    /// An XDJ-RX3 asked for one page of play history on a stick this crate
+    /// wrote, was pointed at the page holding `history_entries`, and wrote over
+    /// it. Two tables then claimed the same page and rekordbox refused the
+    /// file. Both real exports measured here satisfy this for all twenty
+    /// tables, so it is a property of the format rather than of one player.
+    #[test]
+    fn no_table_is_told_to_grow_into_another_tables_page() {
+        let written = write_database(&collection());
+        let word = |at: usize| u32::from_le_bytes(written[at..at + 4].try_into().unwrap());
+        let tables = word(0x08) as usize;
+
+        let mut owner: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        for table in 0..tables {
+            let entry = 0x1c + table * 16;
+            let page_type = word(entry);
+            for page in word(entry + 8)..=word(entry + 12) {
+                if let Some(other) = owner.insert(page, page_type) {
+                    panic!("page {page} is claimed by page types {other} and {page_type}");
+                }
+            }
+        }
+
+        let pages = (written.len() / PAGE_SIZE) as u32;
+        for table in 0..tables {
+            let entry = 0x1c + table * 16;
+            let page_type = word(entry);
+            let candidate = word(entry + 4);
+            assert!(
+                !owner.contains_key(&candidate),
+                "page type {page_type} would grow into page {candidate}, which page type {} owns",
+                owner[&candidate]
+            );
+            assert!(
+                candidate < pages,
+                "page type {page_type} would grow into page {candidate}, past the {pages} pages of the file"
+            );
+        }
+        assert!(
+            word(0x0c) >= pages,
+            "next_unused_page {} sits inside the {pages} pages already written",
+            word(0x0c)
+        );
+    }
+
     /// The three tables whose rows rekordbox fills from its own menu rather
     /// than from a library, carrying the counts every export examined carries.
     #[test]
