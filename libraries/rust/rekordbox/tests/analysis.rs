@@ -158,6 +158,57 @@ fn the_colour_preview_is_the_width_the_format_reads() {
     assert_eq!(preview.header.total_size, 24 + 1200 * 6);
 }
 
+/// The seek index is written when the track carries one and zeroed when it
+/// does not.
+///
+/// Two callers fill `Track::seek_table`, the CLI off a disk and the browser out
+/// of a tab, and a stick went out with 401 zeros on every one of 135 tracks
+/// because only one of them did. The writer is what both reach, so this is
+/// where the two shapes are pinned.
+#[test]
+fn the_seek_index_carries_the_table_the_track_was_given() {
+    fn pvbr(bytes: &[u8]) -> Vec<u32> {
+        let mut at = u32::from_be_bytes(bytes[4..8].try_into().unwrap()) as usize;
+        while at + 12 <= bytes.len() {
+            let kind = &bytes[at..at + 4];
+            let header = u32::from_be_bytes(bytes[at + 4..at + 8].try_into().unwrap()) as usize;
+            let total = u32::from_be_bytes(bytes[at + 8..at + 12].try_into().unwrap()) as usize;
+            if kind == b"PVBR" {
+                return bytes[at + header..at + total]
+                    .chunks(4)
+                    .map(|word| u32::from_be_bytes(word.try_into().unwrap()))
+                    .collect();
+            }
+            if total == 0 {
+                break;
+            }
+            at += total;
+        }
+        panic!("every DAT carries a PVBR section");
+    }
+
+    let mut without = track();
+    without.seek_table = None;
+    let words = pvbr(&rekordbox::anlz::dat(&without));
+    assert_eq!(words.len(), 401, "the section is 401 words either way");
+    assert!(
+        words.iter().all(|word| *word == 0),
+        "a format needing no index writes zeros, as rekordbox does for WAV"
+    );
+
+    let mut with = track();
+    let table: Vec<u32> = (0..400)
+        .map(|slice| slice as u32 * 1000)
+        .chain([555_555])
+        .collect();
+    with.seek_table = Some(table.clone());
+    assert_eq!(
+        pvbr(&rekordbox::anlz::dat(&with)),
+        table,
+        "the table the track carries is the table the section holds"
+    );
+}
+
 #[test]
 fn a_track_with_no_beats_still_produces_readable_files() {
     // A file the tempo stage could not measure still has to export, or one bad

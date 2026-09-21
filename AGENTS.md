@@ -205,6 +205,14 @@ edit to `Cargo.toml`.
     or after the midpoint of its slice, measured from the first frame that carries audio rather
     than from the file, and the sample count leaves out `lame`'s info frame. 351 of the 401
     words come out identical against that file and the rest land within one frame.
+
+    `Track::seek_table` has two callers and both have to fill it: the CLI reads the file off a
+    disk in `export.rs`, and the browser reads it out of a tab in `dubplate-wasm`. A stick went
+    out with 401 zeros on all 135 tracks because only the CLI did, and every check passed,
+    because the browser and the CLI share the writer and differ only in who hands it the table.
+    `Format::needs_seek_index` is the one place that says which formats want one, and
+    `the_seek_index_carries_the_table_the_track_was_given` pins both shapes at the writer.
+    Anything else that builds a `Track` owes the same.
 24. **An artist is not a track number.** File names reach this tool in two shapes, a shop's
     `Artist-Title_(Mix)` and a ripped set's `04 - Artist - Title`, and splitting the second on
     a bare hyphen gives every track an artist called `004`. A 135-track library came off the

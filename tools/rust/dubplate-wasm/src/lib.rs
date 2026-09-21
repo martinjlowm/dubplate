@@ -265,15 +265,15 @@ impl Device {
             )));
         }
 
-        let file = source::open(file)?;
-        let size = file
+        let held = source::open(file)?;
+        let size = held
             .len()
             .map_err(|e| JsError::new(&format!("{export_name}: {e}")))?;
 
         // The browser holds the file the page was given and writes it across
         // whole, so the head the analysis skipped is added back to every time
         // rather than cut off the audio.
-        let track = collection::report::parse(
+        let mut track = collection::report::parse(
             export_name,
             size,
             report.as_bytes(),
@@ -282,10 +282,21 @@ impl Device {
         )
         .map_err(|e| JsError::new(&format!("{export_name}: {e}")))?;
 
+        // Where the frames of a variable-bitrate file are, which a player needs
+        // to scrub it and which nothing in the report can say: it is a property
+        // of the file going on the device rather than of the samples measured.
+        // Read through a second handle so the one kept for the image copy stays
+        // at the start of the file, and dropped as soon as the table is built.
+        if track.format.needs_seek_index() {
+            let bytes = read_whole(source::open(file)?)
+                .map_err(|e| JsError::new(&format!("{export_name}: {e}")))?;
+            track.seek_table = audio::mp3::seek_table(&bytes).map(|table| table.to_words());
+        }
+
         self.audio.0.push(Held {
             file_name: export_name.to_string(),
             size,
-            file,
+            file: held,
         });
         self.tracks.push(track);
         Ok(())

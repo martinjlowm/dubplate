@@ -153,7 +153,7 @@ fn discover(audio_directory: &Path, reports: &Path, trim: Trim) -> Result<Vec<co
 /// Only MP3. A WAV's byte offset is its timestamp times a constant, which is
 /// why rekordbox writes zeros for one.
 fn seek_table(file: &Path, format: collection::Format) -> Result<Option<Vec<u32>>> {
-    if format != collection::Format::Mp3 {
+    if !format.needs_seek_index() {
         return Ok(None);
     }
     let bytes = std::fs::read(file)?;

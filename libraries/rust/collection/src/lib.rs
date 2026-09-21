@@ -49,6 +49,16 @@ impl Format {
     pub fn is_lossless(&self) -> bool {
         !matches!(self, Format::Mp3)
     }
+
+    /// True when a player needs a table of frame offsets to seek in this
+    /// format, because its bitrate varies and a timestamp is not a byte count.
+    ///
+    /// Here rather than at each caller: the CLI reads the file off a disk and
+    /// the browser holds it in a tab, and two of them deciding which formats
+    /// need one is two of them disagreeing.
+    pub fn needs_seek_index(&self) -> bool {
+        matches!(self, Format::Mp3)
+    }
 }
 
 /// One beat of the grid.
