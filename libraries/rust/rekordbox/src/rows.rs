@@ -140,11 +140,11 @@ impl TrackRow {
             "",                 // ISRC
             "",                 // lyricist
             "1",                // increments when rekordbox re-exports a track
-            "3",                // unknown, a number in every file we have seen
+            "2",                // unknown, this number in every file we have seen
             "",                 // unknown
             "",                 // message
             "",                 // publish track information
-            "",                 // autoload hotcues, "ON" or empty
+            "ON",               // autoload hotcues, "ON" in every export examined
             "",                 // unknown
             "",                 // unknown
             &self.date_added,   //
@@ -231,13 +231,17 @@ pub fn album(id: u32, artist_id: u32, name: &str) -> Vec<u8> {
 }
 
 /// The fixed part of a colour row.
+///
+/// Every real export writes the colour twice, once in the byte before the id
+/// and once as the id itself. The byte is not padding: zeroing it is the one
+/// thing that separated this row from the one rekordbox writes.
 #[derive(DekuWrite)]
 #[deku(endian = "little")]
 struct ColourRowFixed {
     unknown1: u32,
-    unknown2: u8,
-    index: u8,
-    unknown3: u16,
+    colour_again: u8,
+    id: u16,
+    unknown3: u8,
 }
 
 /// A colour row. Written even though nothing here assigns colours, because a
@@ -245,8 +249,8 @@ struct ColourRowFixed {
 pub fn colour(index: u8, name: &str) -> Vec<u8> {
     let mut row = bytes(&ColourRowFixed {
         unknown1: 0,
-        unknown2: 0,
-        index,
+        colour_again: index,
+        id: u16::from(index),
         unknown3: 0,
     });
     row.extend_from_slice(&string::encode(name));

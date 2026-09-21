@@ -105,6 +105,13 @@ edit to `Cargo.toml`.
     the round-trip tests passing. The published 0.3.0 is two years behind and reads a cue
     point's type as 0 where the current analysis uses 1; that is why the dependency is a git
     revision and not a version range.
+
+    rekordcrate proves a file is well formed, not that a player accepts it. It reads a field
+    whose purpose nobody has established as an opaque number and writes back whatever it read,
+    so a round trip returns a wrong constant unchanged and passes. Five wrong constants and a
+    row-group bitmask that was never written survived every round-trip test this crate has.
+    What caught them was comparing the bytes to an export rekordbox wrote, and that is the
+    check a change to a layout owes.
 15. **Fields the format analysis calls unknown carry the constants real exports carry.**
     They are not padding. Zeroing one because nobody has explained it is how a stick becomes
     unreadable on a player nobody here owns. Every layout is a `deku` struct with its field
@@ -112,10 +119,29 @@ edit to `Cargo.toml`.
     comment rather than a number in a byte stream. A new layout is declared the same way; the
     offset arrays and the page packing stay hand-written, because where a row lands depends on
     what came before it and a derive macro cannot say that.
-16. **`Track::device_path` is the only place a file's location on the device is decided.**
+
+    Where the format analysis and a real export disagree, the export wins and the comment says
+    so. The published analysis records the beat grid's unknown word as 0x00800000 and the two
+    preview waveforms' as 0x00100000; 324 files, rekordbox exports and an XDJ-RX3's own writes
+    alike, carry 0x00080000 and 0x00010000. It calls the word after a cue list's length a count
+    of the memory cues; all 924 cue lists measured carry all ones, lists holding cues included.
+    Reading a constant out of the prose rather than out of a file is what put all three wrong.
+16. **A table a player browses is twenty tables, and three of them are copied.** `export.pdb`
+    lists page types 0 to 19 without a gap in every export examined, the six nobody has named
+    included, and a table with no rows is still an entry and still a page. `Columns` and the
+    two beside it hold 27, 22 and 17 rows that are byte-identical in an empty export and a
+    135-track one four years apart: they are the browse menu, nothing about a library changes
+    them, and `libraries/rust/rekordbox/pages/` carries them rather than deriving them. The
+    first page of every table is an index page, flagged 0x40 over the ordinary 0x24 and holding
+    no rows, and its entry array is empty for seventeen of the twenty tables in a real
+    135-track library. `tests/pages/colors.bin` is the oracle for all of it: the colour table
+    is the one table built entirely from constants, so it can be compared byte for byte, and
+    that comparison covers the page flags, the free and used counts, the data header and the
+    row group.
+17. **`Track::device_path` is the only place a file's location on the device is decided.**
     The database, the analysis files and the image builder all read it. Two of them computing
     a path separately is two of them disagreeing.
-17. **The Engine schema is Denon's and is not tidied.** Column names, the misspelt
+18. **The Engine schema is Denon's and is not tidied.** Column names, the misspelt
     `currentPlayedIndiciator` and `isPerfomanceDataOfPackedTrackChanged` among them, are what a
     player looks for. The triggers do work on insert, so rows are written with the columns
     they fill left alone. `PerformanceData` is a view, and the analysis blobs reach the track
@@ -123,10 +149,10 @@ edit to `Cargo.toml`.
     assembled: `engine::build` opens an in-memory database, runs the DDL and the inserts, and
     returns `sqlite3_serialize` of the result, so the bytes on the stick are the pages SQLite
     wrote. `write_device` is that plus a write.
-18. **Dates come from `SOURCE_DATE_EPOCH` when it is set.** Otherwise the same library
+19. **Dates come from `SOURCE_DATE_EPOCH` when it is set.** Otherwise the same library
     exports to two different images, which makes every Nix rebuild copy gigabytes for a field
     nobody can hear.
-19. **The analysis and both exporters touch no file, clock or environment variable.**
+20. **The analysis and both exporters touch no file, clock or environment variable.**
     `libraries/rust/pipeline` takes samples and returns a report and named artefacts, and both
     exporters return bytes; opening the file, writing what came back and deciding what today
     is belong to the CLI. That is what lets the same code run in a browser, where `std::fs`

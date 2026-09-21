@@ -38,7 +38,8 @@ const ROW_ALIGNMENT: usize = 4;
 ///
 /// A player looks tables up by this number, so the set below is what rekordbox
 /// emits rather than what this exporter fills in. An empty table still needs
-/// its entry and its page.
+/// its entry and its page: every export examined carries all twenty, numbered
+/// without a gap, and the six nobody has named are as present as the rest.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum PageType {
@@ -51,17 +52,22 @@ pub enum PageType {
     Colors = 6,
     PlaylistTree = 7,
     PlaylistEntries = 8,
+    Unknown9 = 9,
+    Unknown10 = 10,
     HistoryPlaylists = 11,
     HistoryEntries = 12,
     Artwork = 13,
+    Unknown14 = 14,
+    Unknown15 = 15,
     Columns = 16,
-    Menu = 17,
-    Sync = 19,
+    Unknown17 = 17,
+    Unknown18 = 18,
+    History = 19,
 }
 
 impl PageType {
     /// Every table rekordbox writes, in the order it writes them.
-    pub const ALL: [PageType; 15] = [
+    pub const ALL: [PageType; 20] = [
         PageType::Tracks,
         PageType::Genres,
         PageType::Artists,
@@ -71,14 +77,52 @@ impl PageType {
         PageType::Colors,
         PageType::PlaylistTree,
         PageType::PlaylistEntries,
+        PageType::Unknown9,
+        PageType::Unknown10,
         PageType::HistoryPlaylists,
         PageType::HistoryEntries,
         PageType::Artwork,
+        PageType::Unknown14,
+        PageType::Unknown15,
         PageType::Columns,
-        PageType::Menu,
-        PageType::Sync,
+        PageType::Unknown17,
+        PageType::Unknown18,
+        PageType::History,
     ];
+
+    /// The page rekordbox fills this table with whatever the library holds.
+    ///
+    /// Three tables carry the same rows in every export examined, an empty one
+    /// and a 135-track one four years apart included: `Columns` is the browse
+    /// menu a player draws, and the two beside it are whatever the menu needs.
+    /// Nothing about a library changes them, so they are copied rather than
+    /// derived. See `pages/`.
+    fn boilerplate(self) -> Option<&'static [u8; PAGE_SIZE]> {
+        match self {
+            PageType::Columns => Some(include_bytes!("../pages/columns.bin")),
+            PageType::Unknown17 => Some(include_bytes!("../pages/unknown-17.bin")),
+            PageType::Unknown18 => Some(include_bytes!("../pages/unknown-18.bin")),
+            _ => None,
+        }
+    }
 }
+
+/// The first page of every table, which holds no rows.
+///
+/// rekordbox writes an index page here, flagged 0x40 over the ordinary 0x24,
+/// and leaves its entry array empty for every table but the three largest. The
+/// bytes are one template in every export examined, so this exporter writes
+/// that template and patches the four words that say where the page sits. An
+/// empty entry array is what rekordbox itself writes for seventeen of its
+/// twenty tables in a 135-track library.
+const INDEX_PAGE: &[u8; PAGE_SIZE] = include_bytes!("../pages/index-page.bin");
+
+/// Where the index page repeats its own number, and where it points at the
+/// first page holding rows.
+const INDEX_SELF_AT: usize = 0x28;
+const INDEX_NEXT_AT: usize = 0x2c;
+/// What the index page points at when the table has no page holding rows.
+const INDEX_NO_ROWS: u32 = 0x03ff_ffff;
 
 /// One encoded row, and whether it carries an `index_shift` field.
 ///
@@ -178,12 +222,22 @@ impl Database {
             for (position, page) in table.pages.iter().enumerate() {
                 let index = table.first_page + position;
                 let next = index + 1;
-                out.write_all(&build_page(
-                    index,
-                    table.page_type,
-                    next,
-                    &self.rows_of(table.page_type)[page.first_row..page.first_row + page.row_count],
-                ))?;
+                let bytes = match page {
+                    PagePlan::Index { has_rows } => {
+                        index_page(index, table.page_type, next, *has_rows)
+                    }
+                    PagePlan::Boilerplate(bytes) => verbatim_page(index, next, bytes),
+                    PagePlan::Rows {
+                        first_row,
+                        row_count,
+                    } => build_page(
+                        index,
+                        table.page_type,
+                        next,
+                        &self.rows_of(table.page_type)[*first_row..*first_row + *row_count],
+                    ),
+                };
+                out.write_all(&bytes)?;
             }
         }
         Ok(())
@@ -204,20 +258,25 @@ impl Database {
         let mut tables = Vec::with_capacity(self.tables.len());
 
         for (page_type, table) in &self.tables {
-            // The first page of a table holds no rows. Players expect it and
-            // rekordbox writes it, so a single-page table has one empty page.
-            let mut pages = vec![PagePlan {
-                first_row: 0,
-                row_count: 0,
-            }];
-            let mut first_row = 0;
-            while first_row < table.rows.len() {
-                let count = rows_that_fit(&table.rows[first_row..])?;
-                pages.push(PagePlan {
-                    first_row,
-                    row_count: count,
+            // The first page of a table is its index and holds no rows. A table
+            // with nothing in it is that page on its own.
+            let mut pages = Vec::new();
+            if let Some(bytes) = page_type.boilerplate() {
+                pages.push(PagePlan::Index { has_rows: true });
+                pages.push(PagePlan::Boilerplate(bytes));
+            } else {
+                pages.push(PagePlan::Index {
+                    has_rows: !table.rows.is_empty(),
                 });
-                first_row += count;
+                let mut first_row = 0;
+                while first_row < table.rows.len() {
+                    let count = rows_that_fit(&table.rows[first_row..])?;
+                    pages.push(PagePlan::Rows {
+                        first_row,
+                        row_count: count,
+                    });
+                    first_row += count;
+                }
             }
 
             let first_page = next_index;
@@ -249,9 +308,13 @@ struct TablePlan {
     pages: Vec<PagePlan>,
 }
 
-struct PagePlan {
-    first_row: usize,
-    row_count: usize,
+enum PagePlan {
+    /// The table's index page, which holds no rows.
+    Index { has_rows: bool },
+    /// A page copied from a real export.
+    Boilerplate(&'static [u8; PAGE_SIZE]),
+    /// A page of rows this exporter encoded.
+    Rows { first_row: usize, row_count: usize },
 }
 
 /// How many of these rows fit on one page, rows and their row groups together.
@@ -281,6 +344,40 @@ fn rows_that_fit(rows: &[RowBytes]) -> io::Result<usize> {
     Ok(rows.len())
 }
 
+/// The index page that opens a table, patched to say where it sits.
+///
+/// `has_rows` decides whether it points at the page after it or at the sentinel
+/// rekordbox writes when the table holds nothing.
+fn index_page(index: usize, page_type: PageType, next_page: usize, has_rows: bool) -> Vec<u8> {
+    let mut page = INDEX_PAGE.to_vec();
+    let mut put = |at: usize, value: u32| {
+        page[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    };
+    put(0x04, index as u32);
+    put(0x08, page_type as u32);
+    put(0x0c, next_page as u32);
+    put(0x10, 1);
+    put(INDEX_SELF_AT, index as u32);
+    put(
+        INDEX_NEXT_AT,
+        if has_rows {
+            next_page as u32
+        } else {
+            INDEX_NO_ROWS
+        },
+    );
+    page
+}
+
+/// A page copied whole from a real export, patched to say where it sits.
+fn verbatim_page(index: usize, next_page: usize, bytes: &[u8; PAGE_SIZE]) -> Vec<u8> {
+    let mut page = bytes.to_vec();
+    page[0x04..0x08].copy_from_slice(&(index as u32).to_le_bytes());
+    page[0x0c..0x10].copy_from_slice(&(next_page as u32).to_le_bytes());
+    page[0x10..0x14].copy_from_slice(&1u32.to_le_bytes());
+    page
+}
+
 /// Serialise one page.
 fn build_page(index: usize, page_type: PageType, next_page: usize, rows: &[RowBytes]) -> Vec<u8> {
     let mut page = vec![0u8; PAGE_SIZE];
@@ -305,6 +402,11 @@ fn build_page(index: usize, page_type: PageType, next_page: usize, rows: &[RowBy
     // Row groups backward from the end of the heap. Group zero is the last
     // thirty-six bytes of the page, and within a group the offsets are stored in
     // reverse, so the first row of the group sits closest to the flags.
+    //
+    // The bitmask is written twice, the way the page header states its row
+    // count twice: once for the rows present and once for the rows still valid.
+    // Writing only the first leaves a group whose every row a player can read
+    // and none it is told to trust.
     let group_count = rows.len().div_ceil(ROWS_PER_GROUP);
     for group in 0..group_count {
         let group_start = PAGE_SIZE - (group + 1) * ROW_GROUP_SIZE;
@@ -317,11 +419,11 @@ fn build_page(index: usize, page_type: PageType, next_page: usize, rows: &[RowBy
             page[position..position + 2].copy_from_slice(&offset.to_le_bytes());
             flags |= 1 << slot;
         }
-        let flags_at = group_start + ROWS_PER_GROUP * 2;
-        page[flags_at..flags_at + 2].copy_from_slice(&flags.to_le_bytes());
+        let present_at = group_start + ROWS_PER_GROUP * 2;
+        page[present_at..present_at + 2].copy_from_slice(&flags.to_le_bytes());
+        page[present_at + 2..present_at + 4].copy_from_slice(&flags.to_le_bytes());
     }
 
-    let group_bytes = group_count * ROW_GROUP_SIZE;
     let header = bytes(&PageHeader {
         magic: 0,
         index: index as u32,
@@ -332,12 +434,12 @@ fn build_page(index: usize, page_type: PageType, next_page: usize, rows: &[RowBy
         rows_present: rows.len() as u16,
         rows_valid: rows.len() as u16,
         page_flags: 0x24,
-        free_size: (HEAP_SIZE - used - group_bytes) as u16,
-        used_size: used as u16,
-        data_unknown: 1,
+        free_size: free_size(used, rows.len()) as u16,
+        used_size: used.next_multiple_of(ROW_ALIGNMENT) as u16,
         data_rows: rows.len() as u16,
         data_zero1: 0,
         data_zero2: 0,
+        data_zero3: 0,
     });
     page[..header.len()].copy_from_slice(&header);
 
@@ -365,15 +467,27 @@ struct PageHeader {
     #[deku(bits = 11)]
     rows_valid: u16,
     /// 0x24 is what rekordbox writes on a data page holding rows. The 0x40 bit
-    /// would mark it an index page, which this exporter never writes.
+    /// marks an index page, which [`INDEX_PAGE`] carries instead of this.
     page_flags: u8,
     free_size: u16,
     used_size: u16,
-    /// The data header: a constant, the row count again, and four zero bytes.
-    data_unknown: u16,
+    /// The data header: the row count again, then six zero bytes.
     data_rows: u16,
     data_zero1: u16,
     data_zero2: u16,
+    data_zero3: u16,
+}
+
+/// Bytes on a page that neither a row nor a row group has claimed.
+///
+/// A group is 36 bytes of slots but only the slots a row filled count as used,
+/// so a page of one row leaves the other fifteen slots free. Deriving it from
+/// whole groups instead understates the figure by two bytes per empty slot,
+/// which is how every export examined counts it.
+fn free_size(used: usize, rows: usize) -> usize {
+    let groups = rows.div_ceil(ROWS_PER_GROUP);
+    let claimed = groups * 4 + rows * 2;
+    HEAP_SIZE - used.next_multiple_of(ROW_ALIGNMENT) - claimed
 }
 
 /// The file header: page size, table count, and where the pages end.
@@ -417,7 +531,6 @@ mod header_layout {
         next_page: usize,
         row_count: usize,
         used: usize,
-        group_bytes: usize,
     ) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(&0u32.to_le_bytes());
@@ -431,10 +544,10 @@ mod header_layout {
         out.push(((packed >> 8) & 0xff) as u8);
         out.push(((packed >> 16) & 0xff) as u8);
         out.push(0x24);
-        out.extend_from_slice(&((HEAP_SIZE - used - group_bytes) as u16).to_le_bytes());
-        out.extend_from_slice(&(used as u16).to_le_bytes());
-        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&(free_size(used, row_count) as u16).to_le_bytes());
+        out.extend_from_slice(&(used.next_multiple_of(ROW_ALIGNMENT) as u16).to_le_bytes());
         out.extend_from_slice(&(row_count as u16).to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
         out.extend_from_slice(&0u16.to_le_bytes());
         out.extend_from_slice(&0u16.to_le_bytes());
         out
@@ -470,10 +583,10 @@ mod header_layout {
             page_flags: 0x24,
             free_size: 0,
             used_size: 0,
-            data_unknown: 1,
             data_rows: 2048,
             data_zero1: 0,
             data_zero2: 0,
+            data_zero3: 0,
         };
         assert!(
             over.to_bytes().is_err(),
@@ -495,7 +608,6 @@ mod header_layout {
             MOST_ROWS_A_PAGE_CAN_HOLD,
         ] {
             let used = row_count * 4;
-            let group_bytes = row_count.div_ceil(ROWS_PER_GROUP) * ROW_GROUP_SIZE;
             let declared = bytes(&PageHeader {
                 magic: 0,
                 index: 7,
@@ -506,16 +618,16 @@ mod header_layout {
                 rows_present: row_count as u16,
                 rows_valid: row_count as u16,
                 page_flags: 0x24,
-                free_size: (HEAP_SIZE - used - group_bytes) as u16,
-                used_size: used as u16,
-                data_unknown: 1,
+                free_size: free_size(used, row_count) as u16,
+                used_size: used.next_multiple_of(ROW_ALIGNMENT) as u16,
                 data_rows: row_count as u16,
                 data_zero1: 0,
                 data_zero2: 0,
+                data_zero3: 0,
             });
             assert_eq!(
                 declared,
-                cursor_written(7, PageType::Tracks, 8, row_count, used, group_bytes),
+                cursor_written(7, PageType::Tracks, 8, row_count, used),
                 "page header for {row_count} rows"
             );
             assert_eq!(

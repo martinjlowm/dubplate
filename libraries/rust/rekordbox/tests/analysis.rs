@@ -69,6 +69,9 @@ fn sections(bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
+/// The order is the one every DAT of the 135-track export carries, and the
+/// hot cues come before the memory cues. A parser that reads section headers
+/// does not care; a player that seeks to a fixed offset does.
 #[test]
 fn the_dat_file_carries_the_grid_the_cues_and_the_previews() {
     let bytes = rekordbox::anlz::dat(&track());
@@ -77,11 +80,12 @@ fn the_dat_file_carries_the_grid_the_cues_and_the_previews() {
         kinds,
         vec![
             "Path",
+            "VBR",
             "BeatGrid",
-            "CueList",
-            "CueList",
             "WaveformPreview",
-            "TinyWaveformPreview"
+            "TinyWaveformPreview",
+            "CueList",
+            "CueList"
         ]
     );
 
@@ -104,8 +108,10 @@ fn the_ext_file_carries_the_scrolling_and_colour_waveforms() {
         vec![
             "Path",
             "WaveformDetail",
-            "WaveformColorPreview",
-            "WaveformColorDetail"
+            "CueList",
+            "CueList",
+            "WaveformColorDetail",
+            "WaveformColorPreview"
         ]
     );
 }

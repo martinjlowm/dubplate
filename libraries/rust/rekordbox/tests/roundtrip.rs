@@ -280,3 +280,130 @@ fn a_collection_larger_than_one_page_still_reads_back() {
 
     assert_eq!(read::<PlaylistEntry>(&bytes).len(), 50);
 }
+
+/// The colour table as rekordbox wrote it, which is the one table this crate
+/// fills entirely from constants.
+///
+/// Both its pages come out of a real export: the index page that opens every
+/// table, and the page holding the eight colour rows. Nothing about a library
+/// changes either, so a byte comparison is available here and nowhere else, and
+/// it covers the whole page layer rather than the colours alone: the flags that
+/// mark an index page, the free and used counts, the data header, and the row
+/// group with its bitmask written twice.
+///
+/// `rekordcrate` cannot catch any of that. It reads those fields as opaque
+/// numbers and hands back whatever it read, so a database it round-trips
+/// happily is still one a player may refuse.
+mod against_a_real_export {
+    use super::*;
+    use rekordbox::pdb::PAGE_SIZE;
+
+    /// Extracted from `PIONEER/rekordbox/export.pdb` of a 135-track export.
+    /// The words saying where a page sat in that file are zeroed, because they
+    /// are the only ones that depend on the library around it.
+    const REAL_COLOUR_PAGES: &[u8] = include_bytes!("pages/colors.bin");
+
+    /// Zero the page index, the next-page pointer and the sequence number, and
+    /// on an index page the two places it repeats them.
+    fn without_its_position(page: &[u8]) -> Vec<u8> {
+        let mut page = page.to_vec();
+        let is_index = page[27] & 0x40 != 0;
+        let mut zero = |at: usize| page[at..at + 4].copy_from_slice(&0u32.to_le_bytes());
+        zero(0x04);
+        zero(0x0c);
+        zero(0x10);
+        if is_index {
+            zero(0x28);
+            zero(0x2c);
+        }
+        page
+    }
+
+    /// Every page of one table, in chain order.
+    fn pages_of(database: &[u8], page_type: u32) -> Vec<Vec<u8>> {
+        let word = |at: usize| u32::from_le_bytes(database[at..at + 4].try_into().unwrap());
+        let tables = word(0x08) as usize;
+        let mut out = Vec::new();
+        for table in 0..tables {
+            let entry = 0x1c + table * 16;
+            if word(entry) != page_type {
+                continue;
+            }
+            for page in word(entry + 8)..=word(entry + 12) {
+                let at = page as usize * PAGE_SIZE;
+                let bytes = &database[at..at + PAGE_SIZE];
+                if word(at + 8) == page_type {
+                    out.push(without_its_position(bytes));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_colour_table_is_byte_for_byte_the_one_rekordbox_writes() {
+        let written = write_database(&collection());
+        let ours = pages_of(&written, 6);
+        let real: Vec<Vec<u8>> = REAL_COLOUR_PAGES
+            .chunks(PAGE_SIZE)
+            .map(|page| page.to_vec())
+            .collect();
+
+        assert_eq!(
+            ours.len(),
+            real.len(),
+            "the colour table is {} pages and rekordbox writes {}",
+            ours.len(),
+            real.len()
+        );
+        for (index, (ours, real)) in ours.iter().zip(&real).enumerate() {
+            let differing: Vec<String> = ours
+                .iter()
+                .zip(real.iter())
+                .enumerate()
+                .filter(|(_, (a, b))| a != b)
+                .map(|(at, (a, b))| format!("0x{at:03x}: wrote 0x{a:02x}, rekordbox 0x{b:02x}"))
+                .collect();
+            assert!(
+                differing.is_empty(),
+                "colour page {index} differs from the one rekordbox writes at {} bytes:\n  {}",
+                differing.len(),
+                differing.join("\n  ")
+            );
+        }
+    }
+
+    #[test]
+    fn every_table_rekordbox_writes_is_present_and_numbered_without_a_gap() {
+        let written = write_database(&collection());
+        let word = |at: usize| u32::from_le_bytes(written[at..at + 4].try_into().unwrap());
+        assert_eq!(word(0x08), 20, "a real export lists twenty tables");
+        for table in 0..20u32 {
+            let entry = 0x1c + table as usize * 16;
+            assert_eq!(
+                word(entry),
+                table,
+                "table {table} of the header list should be page type {table}"
+            );
+        }
+    }
+
+    /// The three tables whose rows rekordbox fills from its own menu rather
+    /// than from a library, carrying the counts every export examined carries.
+    #[test]
+    fn the_browse_menu_tables_carry_the_rows_a_player_reads() {
+        let written = write_database(&collection());
+        for (page_type, expected) in [(16u32, 27usize), (17, 22), (18, 17)] {
+            let rows: usize = pages_of(&written, page_type)
+                .iter()
+                .map(|page| {
+                    (u32::from_le_bytes([page[24], page[25], page[26], 0]) & 0x1fff) as usize
+                })
+                .sum();
+            assert_eq!(
+                rows, expected,
+                "page type {page_type} holds {rows} rows and rekordbox writes {expected}"
+            );
+        }
+    }
+}

@@ -62,7 +62,10 @@ struct PathHeader {
 #[deku(endian = "big")]
 struct BeatGridHeader {
     zero: u32,
-    /// Constant in every file that has been examined.
+    /// Constant in every file that has been examined. The format analysis and
+    /// rekordcrate both record it as 0x00800000; the 324 files measured against
+    /// here, rekordbox exports and an XDJ-RX3's own writes alike, all carry the
+    /// value below.
     constant: u32,
     len_beats: u32,
 }
@@ -85,7 +88,10 @@ struct CueListHeader {
     list_type: u32,
     zero: u16,
     len_cues: u16,
-    memory_count: u32,
+    /// The format analysis calls this a count of the memory cues. It is all
+    /// ones in each of the 924 cue lists measured against here, lists holding
+    /// cues included, so it counts nothing.
+    all_ones: u32,
 }
 
 /// `PCPT`: one cue, fixed at 0x38 bytes of which this is the body.
@@ -121,7 +127,9 @@ struct CueEntry {
 #[deku(endian = "big")]
 struct PreviewHeader {
     len_data: u32,
-    /// Constant in every file that has been examined.
+    /// Constant in every file that has been examined. The format analysis
+    /// records 0x00100000; all 324 files measured against here carry the value
+    /// below.
     constant: u32,
 }
 
@@ -196,28 +204,40 @@ fn bytes(layout: &impl DekuContainerWrite) -> Vec<u8> {
     layout.to_bytes().expect("a fixed layout with no counts")
 }
 
-/// The DAT file: path, beat grid, cues, and the two preview waveforms.
+/// The DAT file: path, seek index, beat grid, the two preview waveforms, cues.
+///
+/// The order is the one every real DAT carries. A parser that reads the section
+/// headers does not need it, and a player that seeks to a fixed offset does.
 pub fn dat(track: &Track) -> Vec<u8> {
     let mut sections = Vec::new();
     sections.extend(path_section(&track.device_path));
+    sections.extend(seek_index());
     sections.extend(beat_grid(track));
-    sections.extend(cue_list(track, CueKind::Memory));
-    sections.extend(cue_list(track, CueKind::Hot));
     sections.extend(waveform_preview(track));
     sections.extend(tiny_waveform_preview(track));
+    sections.extend(cue_list(track, CueKind::Hot));
+    sections.extend(cue_list(track, CueKind::Memory));
     file(sections)
 }
 
-/// The EXT file: the path again, and the scrolling waveform.
+/// The EXT file: the path again, the scrolling waveforms and the cues.
 ///
 /// The path is repeated because a player may read either file first and each
 /// one has to identify the track it belongs to.
+///
+/// A real EXT carries four more sections this one does not: `PCO2` twice, the
+/// cue lists a Nexus 2 reads in preference to `PCOB`, `PQT2` for the extended
+/// beat grid, and `PSSI` for the phrases. The first three are cues and beats
+/// this exporter already measures in a layout nothing here has been checked
+/// against; `PSSI` is phrase detection it does not do at all.
 pub fn ext(track: &Track) -> Vec<u8> {
     let mut sections = Vec::new();
     sections.extend(path_section(&track.device_path));
     sections.extend(waveform_detail(track));
-    sections.extend(colour_waveform_preview(track));
+    sections.extend(cue_list(track, CueKind::Hot));
+    sections.extend(cue_list(track, CueKind::Memory));
     sections.extend(colour_waveform_detail(track));
+    sections.extend(colour_waveform_preview(track));
     file(sections)
 }
 
@@ -259,11 +279,24 @@ fn path_section(device_path: &str) -> Vec<u8> {
     section(b"PPTH", 0x10, &body)
 }
 
+/// `PVBR`: the seek index, 1604 bytes of offsets plus a leading word.
+///
+/// It lets a player seek in a file whose bitrate varies. Every real DAT carries
+/// one, and for the constant-bitrate files this exporter writes it is zeros:
+/// across the WAV tracks measured against here, two or three of its 1608 bytes
+/// were non-zero. An MP3 built by the archive pipeline would want a real index,
+/// which means decoding the file to find the frames, so it gets zeros too and a
+/// player seeks in it by arithmetic instead.
+fn seek_index() -> Vec<u8> {
+    const LEN_BODY: usize = 1608;
+    section(b"PVBR", 0x10, &[0u8; LEN_BODY])
+}
+
 /// `PQTZ`: the beat grid, as a beat number in the bar, a tempo and a time.
 fn beat_grid(track: &Track) -> Vec<u8> {
     let mut body = bytes(&BeatGridHeader {
         zero: 0,
-        constant: 0x0080_0000,
+        constant: 0x0008_0000,
         len_beats: track.beats.len() as u32,
     });
     for beat in &track.beats {
@@ -286,7 +319,7 @@ fn cue_list(track: &Track, kind: CueKind) -> Vec<u8> {
         list_type: u32::from(kind == CueKind::Hot),
         zero: 0,
         len_cues: cues.len() as u16,
-        memory_count: cues.len() as u32,
+        all_ones: 0xffff_ffff,
     });
 
     for (position, cue) in cues.iter().enumerate() {
@@ -330,7 +363,7 @@ fn waveform_preview(track: &Track) -> Vec<u8> {
 
     let mut body = bytes(&PreviewHeader {
         len_data: content.len() as u32,
-        constant: 0x0010_0000,
+        constant: 0x0001_0000,
     });
     body.extend_from_slice(&content);
     section(b"PWAV", 0x14, &body)
@@ -348,7 +381,7 @@ fn tiny_waveform_preview(track: &Track) -> Vec<u8> {
 
     let mut body = bytes(&PreviewHeader {
         len_data: content.len() as u32,
-        constant: 0x0010_0000,
+        constant: 0x0001_0000,
     });
     body.extend_from_slice(&content);
     section(b"PWV2", 0x14, &body)
@@ -418,7 +451,7 @@ fn colour_waveform_detail(track: &Track) -> Vec<u8> {
     let mut body = bytes(&DetailHeader {
         bytes_per_column: 2,
         len_data: track.detail.len() as u32,
-        constant: 0,
+        constant: 0x0096_0305,
     });
     body.extend_from_slice(&content);
     section(b"PWV5", 0x18, &body)
