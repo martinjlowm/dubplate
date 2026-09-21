@@ -44,6 +44,20 @@ Audio and reports are paired by stem: `126_05A_Artist-Title.flac` with
 stderr saying so. It is not exported with an empty beat grid, which would look
 analysed on the player and be wrong.
 
+### The seek index
+
+A player scrubbing a variable-bitrate MP3 needs a map from time to byte offset, and that is
+what the `PVBR` section of `ANLZ0000.DAT` holds: 400 offsets, one per slice of the track, then
+the sample count. `export` builds it by walking the file's frame headers, which is why it
+reads each MP3 rather than only stat-ing it.
+
+A WAV needs no such map, since its byte offset is its timestamp times a constant. rekordbox
+writes zeros there and so does this.
+
+The offsets are measured from the first frame that carries audio, skipping both the ID3 tag
+and `lame`'s own info frame. Checked against an index an XDJ-RX3 wrote for one of these files,
+351 of the 401 words match exactly and the rest land one frame, 24 ms, either side.
+
 ### Trimming the lead-in
 
 A shop's WAV often opens with a second or more of digital black. Left alone, a
@@ -67,6 +81,21 @@ The cut is byte surgery on the RIFF container rather than a decode and a
 re-encode, so the channel count, the bit depth and the sample values come
 through untouched. That is also why it is WAV only: cutting a FLAC or an MP3
 means decoding it, and the archive pipeline is where those are decoded.
+
+### Artist and title
+
+Both come from the file name, since the tool reads no tags. Two shapes are recognised:
+
+| Name | Artist | Title |
+|---|---|---|
+| `138_03A_Bryan_Kearney,_Nedea-Back_Once_Again_(Extended_Mix).wav` | `Bryan Kearney, Nedea` | `Back Once Again (Extended Mix)` |
+| `112_06A_001 - Beyonce - COZY.mp3` | `Beyonce` | `COZY` |
+
+The separator is ` - ` when the name carries one and a bare `-` otherwise, and a leading run
+of digits is a track number or a shop's id rather than an artist. Getting that wrong is not
+cosmetic: a library whose every artist is its track number has nothing a player can browse by,
+which pushes a DJ into the Folder menu, and loading a track from there is the one case where a
+CDJ ignores the exported analysis and reads the file itself.
 
 ## Where each database field comes from
 

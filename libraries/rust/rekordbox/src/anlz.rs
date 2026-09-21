@@ -211,7 +211,7 @@ fn bytes(layout: &impl DekuContainerWrite) -> Vec<u8> {
 pub fn dat(track: &Track) -> Vec<u8> {
     let mut sections = Vec::new();
     sections.extend(path_section(&track.device_path));
-    sections.extend(seek_index());
+    sections.extend(seek_index(track));
     sections.extend(beat_grid(track));
     sections.extend(waveform_preview(track));
     sections.extend(tiny_waveform_preview(track));
@@ -279,17 +279,26 @@ fn path_section(device_path: &str) -> Vec<u8> {
     section(b"PPTH", 0x10, &body)
 }
 
-/// `PVBR`: the seek index, 1604 bytes of offsets plus a leading word.
+/// `PVBR`: the seek index, a leading word and then 401 big-endian ones.
 ///
-/// It lets a player seek in a file whose bitrate varies. Every real DAT carries
-/// one, and for the constant-bitrate files this exporter writes it is zeros:
-/// across the WAV tracks measured against here, two or three of its 1608 bytes
-/// were non-zero. An MP3 built by the archive pipeline would want a real index,
-/// which means decoding the file to find the frames, so it gets zeros too and a
-/// player seeks in it by arithmetic instead.
-fn seek_index() -> Vec<u8> {
-    const LEN_BODY: usize = 1608;
-    section(b"PVBR", 0x10, &[0u8; LEN_BODY])
+/// It lets a player seek in a file whose bitrate varies: 400 byte offsets, one
+/// per slice of the track, then the sample count. A constant-bitrate file needs
+/// none, and across the WAV tracks measured against here two or three of the
+/// section's 1608 bytes were non-zero, so [`Track::seek_table`] is `None` for
+/// those and this writes what rekordbox writes.
+///
+/// An MP3 with 401 zeros here tells a player every point in the track is at
+/// byte zero, which is the state in which it throws the analysis away and reads
+/// the file itself.
+fn seek_index(track: &Track) -> Vec<u8> {
+    const WORDS: usize = 401;
+    let mut body = vec![0u8; 4];
+    let table = track.seek_table.clone().unwrap_or_default();
+    for index in 0..WORDS {
+        let word = table.get(index).copied().unwrap_or(0);
+        body.extend_from_slice(&word.to_be_bytes());
+    }
+    section(b"PVBR", 0x10, &body)
 }
 
 /// `PQTZ`: the beat grid, as a beat number in the bar, a tempo and a time.

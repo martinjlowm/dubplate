@@ -60,6 +60,7 @@ fn track(name: &str, bpm: f64, key: &str, notes: &str) -> Track_ {
         file_size: 76_000_000,
         format: Format::Flac,
         trim_seconds: 0.0,
+        seek_table: None,
         beats,
         cues: vec![Cue {
             kind: CueKind::Memory,

@@ -11,7 +11,8 @@ is the wrong trade.
 ## 1. Where things are
 
 - `libraries/rust/audio` decoding, mono downmix, excerpting, and the synthesised signals the
-  tests measure against.
+  tests measure against. `trim_wav` cuts a RIFF file without decoding it and `mp3.rs` walks
+  frame headers for the seek index a player scrubs a variable-bitrate file with.
 - `libraries/rust/spectral` the STFT and its two reductions, log-spaced band energies and
   chroma, plus the tuning estimator.
 - `libraries/rust/tempo` novelty curves, tempo salience, beat grid, and the rules in
@@ -188,6 +189,21 @@ edit to `Cargo.toml`.
     early. The source is never modified, which is rule 12 again; the cut is byte surgery on
     the RIFF container, so channels and bit depth survive, and a decode-and-re-encode would
     hand back the mono downmix this tool analyses.
+23. **A variable-bitrate file carries a seek index or a player throws the analysis away.**
+    `PVBR` is 400 byte offsets and a sample count, and an MP3 whose 401 words are zero tells a
+    player every point in the track is at byte zero. A WAV needs none, which is why rekordbox
+    writes zeros for one and `Track::seek_table` is `None` there. The convention was read out
+    of an index an XDJ-RX3 wrote for one of this tool's own files: each offset is the frame at
+    or after the midpoint of its slice, measured from the first frame that carries audio rather
+    than from the file, and the sample count leaves out `lame`'s info frame. 351 of the 401
+    words come out identical against that file and the rest land within one frame.
+24. **An artist is not a track number.** File names reach this tool in two shapes, a shop's
+    `Artist-Title_(Mix)` and a ripped set's `04 - Artist - Title`, and splitting the second on
+    a bare hyphen gives every track an artist called `004`. A 135-track library came off the
+    press with 135 artists named `001` to `135`, nothing to browse by on the player, and a DJ
+    driven to the Folder menu, which is the one place a CDJ ignores the analysis and reads the
+    file itself. The rule is the separator: ` - ` when the name has one, a bare hyphen
+    otherwise, and a leading run of digits belongs to neither side.
 
 ## 3. What a change to the algorithm has to show
 
@@ -223,7 +239,12 @@ Say in the pull request what moved.
 ## 4. Out of scope
 
 Formats other than WAV in the Rust code, tag writing, playlists, stem separation, and anything
-that plays audio. The archive pipeline handles other formats by decoding them with `flac` and
+that plays audio. Decoding is what that covers. Reading a container to find out where things
+are in it is not decoding and is in scope: `audio::trim_wav` walks RIFF chunks to cut a file
+without touching a sample, and `audio::mp3` walks frame headers to build the seek index a
+player needs, neither of them turning a byte into a number anybody hears.
+
+The archive pipeline handles other formats by decoding them with `flac` and
 `lame` before the analyser sees them, which keeps one decoder per format and each of them the
 reference implementation. If in-process decoding is ever wanted, it belongs behind the same
 `Audio` type in `libraries/rust/audio` and nothing downstream should notice.

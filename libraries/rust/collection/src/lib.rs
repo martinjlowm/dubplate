@@ -112,6 +112,11 @@ pub struct Track {
     /// rather than two, for the same reason [`Track::device_path`] is one: two
     /// places deciding where a file starts is two places disagreeing.
     pub trim_seconds: f64,
+    /// The 401 words a rekordbox `PVBR` section holds, for a format whose
+    /// bitrate varies. `None` for WAV and anything else whose byte offset is
+    /// its timestamp times a constant, which is what rekordbox writes zeros
+    /// for.
+    pub seek_table: Option<Vec<u32>>,
     pub beats: Vec<Beat>,
     pub cues: Vec<Cue>,
     pub preview: Waveform,

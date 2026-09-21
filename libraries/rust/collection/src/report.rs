@@ -273,6 +273,9 @@ pub fn parse(
         file_size,
         format,
         trim_seconds,
+        // Filled in by whoever holds the audio: the report says nothing about
+        // where the frames of a file are, and this module reads no files.
+        seek_table: None,
         beats,
         cues,
         preview: parsed.waveforms.preview,
@@ -291,8 +294,66 @@ pub fn split_artist_and_title(file_name: &str) -> (String, String) {
         .map_or(file_name, |(stem, _)| stem);
     let stem = crate::naming::strip_prefix(stem);
     let spaced = stem.replace('_', " ");
-    match spaced.split_once('-') {
+
+    // Two shapes reach this. A shop writes `Artist-Title (Mix)` with the hyphen
+    // tight against both words; a ripped set writes `04 - Artist - Title` with
+    // spaces around it. Splitting the second on a bare hyphen takes the track
+    // number for the artist, which is how a library of 135 tracks came out with
+    // 135 artists called 001 to 135 and nothing a player could browse by.
+    let separator = if spaced.contains(" - ") { " - " } else { "-" };
+
+    // A leading run of digits is that track number, or the id a shop prefixes
+    // its downloads with. Neither is an artist.
+    let body = match spaced.split_once(separator) {
+        Some((head, rest))
+            if !head.trim().is_empty() && head.trim().bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            rest
+        }
+        _ => &spaced,
+    };
+
+    match body.split_once(separator) {
         Some((artist, title)) => (artist.trim().to_string(), title.trim().to_string()),
-        None => (String::new(), spaced.trim().to_string()),
+        None => (String::new(), body.trim().to_string()),
+    }
+}
+
+#[cfg(test)]
+mod names {
+    use super::split_artist_and_title;
+
+    #[test]
+    fn both_shapes_of_file_name_split_into_an_artist_and_a_title() {
+        for (file_name, artist, title) in [
+            // What a shop writes, with the rename prefix this tool added.
+            (
+                "138_03A_Bryan_Kearney,_Nedea-Back_Once_Again_(Extended_Mix).wav",
+                "Bryan Kearney, Nedea",
+                "Back Once Again (Extended Mix)",
+            ),
+            // The same, behind the numeric id a shop sometimes prefixes.
+            (
+                "105_04A_13535837-Chicane,_Moya_Brennan-Saltwater_(Slow_Tide_Mix).wav",
+                "Chicane, Moya Brennan",
+                "Saltwater (Slow Tide Mix)",
+            ),
+            // A ripped set: track number, spaced hyphens.
+            ("112_06A_001 - Beyonce - COZY.mp3", "Beyonce", "COZY"),
+            // A title that carries hyphens of its own, which stay in it.
+            (
+                "134_07B_010 - Caroline Polachek - Welcome To My Island - Daniel Remix.mp3",
+                "Caroline Polachek",
+                "Welcome To My Island - Daniel Remix",
+            ),
+            // Nothing to split on is a title and no artist.
+            ("128_04A_Untitled.wav", "", "Untitled"),
+        ] {
+            assert_eq!(
+                split_artist_and_title(file_name),
+                (artist.to_string(), title.to_string()),
+                "splitting {file_name}"
+            );
+        }
     }
 }

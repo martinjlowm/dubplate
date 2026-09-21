@@ -15,6 +15,8 @@ use std::path::Path;
 #[cfg(feature = "compressed")]
 mod compressed;
 
+pub mod mp3;
+
 /// Cut the head off a WAV without decoding it.
 ///
 /// Byte surgery on the container rather than a decode and a re-encode: the

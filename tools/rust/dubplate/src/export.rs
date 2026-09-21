@@ -134,12 +134,30 @@ fn discover(audio_directory: &Path, reports: &Path, trim: Trim) -> Result<Vec<co
             eprintln!("no report for {stem}, skipping");
             continue;
         }
-        tracks.push(
-            collection::report::load(&file, &report, CONTENTS, trim)
-                .with_context(|| format!("reading the analysis of {stem}"))?,
-        );
+        let mut track = collection::report::load(&file, &report, CONTENTS, trim)
+            .with_context(|| format!("reading the analysis of {stem}"))?;
+        track.seek_table = seek_table(&file, track.format)
+            .with_context(|| format!("indexing the frames of {stem}"))?;
+        tracks.push(track);
     }
     Ok(tracks)
+}
+
+/// Where the frames of a variable-bitrate file are, for the `PVBR` section.
+///
+/// Read here rather than during the analysis because it is a property of the
+/// file that goes on the device, not of the samples: the archive pipeline
+/// analyses a WAV and exports the MP3 built from it, and a player seeking in
+/// the MP3 needs that file's own frame offsets.
+///
+/// Only MP3. A WAV's byte offset is its timestamp times a constant, which is
+/// why rekordbox writes zeros for one.
+fn seek_table(file: &Path, format: collection::Format) -> Result<Option<Vec<u32>>> {
+    if format != collection::Format::Mp3 {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(file)?;
+    Ok(audio::mp3::seek_table(&bytes).map(|table| table.to_words()))
 }
 
 fn place_audio(root: &Path, collection: &mut Collection, mode: AudioMode) -> Result<()> {
