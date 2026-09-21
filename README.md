@@ -296,17 +296,17 @@ just analyze track.wav --integer-snap 0
 A track measured further from a whole number than the tolerance allows keeps its decimals and
 raises `non-integer-tempo`, which usually means it was played rather than rendered.
 
-### See what a tempo prior would do
+### See what the tempo weighting did
 
-Detectors that report a plausible answer to everything usually have a prior, and it is
-usually a number somebody picked. There is no way to pick one here. A prior is applied,
-but only where a measurement asks for it:
+Detectors that report a plausible answer to everything usually lean the search toward a
+tempo somebody picked. There is no way to pick one here. The salience curve is weighted
+toward a centre, but only where a measurement names that centre.
 
-The energy bands read how hard a track hits and hand the slow end a prior, which is what
-corrects a soul ballad reported at 199 BPM. There is no flag for any of it, because the
-report says what happened: `energy-band-applied` names the band and the centre,
-`bpm_without_prior` is the answer the track would have had without one, and
-`prior-changed-answer` fires when those two differ.
+The energy bands read how hard a track hits, and the slow band weights the curve toward
+115 BPM, which is what corrects a soul ballad reported at 199. There is no flag for any of
+it, because the report says what happened: `energy-band-applied` names the band and the
+centre, `bpm_unweighted` is the answer the track would have had with no weighting, and
+`weighting-changed-answer` fires when those two differ.
 
 ### Check whether a file came from a lossy source
 
@@ -594,15 +594,16 @@ tempi are whole. On one track in the working set that comparison came out 6.38 a
 where before the snap it was 4.98 against 2.26. The pulse ratio still favours the truth, and
 the number that separates the two by an order of magnitude is the Fourier salience.
 
-### The prior is measured, not picked
+### The tempo weighting is measured, not picked
 
 Most detectors weight candidates towards 120 BPM. It improves the average case and it is
 exactly how a 174 BPM drum and bass track gets reported as 87. So there is no flag that
 takes a tempo: a number you pick is a guess about the answer. What decides instead is the
 energy, built from brightness, crest factor, onset density and the share above 4 kHz, none
-of which the tempo stage touches. A track whose spectrum says it is slow gets a prior; a
-hardstyle record gets none. The report carries the ranking it would have produced without
-one, and when the prior rather than the track picked the winner, that is a finding.
+of which the tempo stage touches. A track whose spectrum says it is slow gets a weighting;
+a hardstyle record gets none. The report carries the ranking it would have produced
+unweighted, and when the weighting rather than the track picked the winner, that is a
+finding.
 
 ### The findings are not warnings about the tool
 

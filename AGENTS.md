@@ -54,16 +54,18 @@ edit to `Cargo.toml`.
    tool exists to troubleshoot.
 2. **Diagnostics never change the answer.** They read what the stage already produced. A rule
    that adjusts a result is not a diagnostic.
-3. **The caller never names a tempo.** A prior improves the average case and is exactly how
-   a 174 BPM track gets reported as 87, so there is no `--tempo-prior`: a number a person
-   picks is a guess about the answer, and this tool exists because guesses about the answer
-   are what go wrong. The prior that is applied is chosen by a measurement. The energy in
+3. **The caller never names a tempo.** Leaning the search toward a tempo improves the
+   average case and is exactly how a 174 BPM track gets reported as 87, so no flag takes a
+   tempo: a number a person picks is a guess about the answer, and this tool exists because
+   guesses about the answer are what go wrong. The one lean that is applied is chosen by a
+   measurement, and it is called a tempo weighting rather than a prior, because nobody
+   supplies it and `TempoWeighting` says what it does to the salience curve. The energy in
    `libraries/rust/energy` puts a track in one of three bands and each band names a centre,
    and its four inputs read nothing the tempo stage produces, because a track reported at
    twice its tempo would otherwise carry that error into the measurement meant to catch it.
    Nothing switches it off, because the report says what it did: `energy-band-applied` names
-   the band and the centre, `bpm_without_prior` carries the answer the track would have had
-   without one, and `prior-changed-answer` fires when those two differ. On the working set
+   the band and the centre, `bpm_unweighted` carries the answer the track would have had
+   without the weighting, and `weighting-changed-answer` fires when those two differ. On the working set
    the bands correct two tracks, change nothing among the other twenty-one and leave the
    selftest untouched. The band centres were chosen by sweeping against the three tracks
    whose tempo anybody has checked, so they are fitted to three examples and not a proof;

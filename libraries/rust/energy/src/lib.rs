@@ -44,11 +44,12 @@ const WEIGHTS: [(f64, f64, f64); 4] = [
     (0.0437, 0.0320, 0.5277),   // share above 4 kHz
 ];
 
-/// What a band asks the tempo stage for.
+/// The tempo the band expects, and how far either side of it the tempo stage
+/// keeps looking.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Prior {
+pub struct Weighting {
     pub centre_bpm: f64,
-    /// How far the prior reaches, in octaves.
+    /// How far the weighting reaches, in octaves.
     ///
     /// Not a caller's knob, because it is not a free one. Swept over the
     /// working set, 0.3 loses the correction on a 90 BPM R&B track and reports
@@ -72,17 +73,17 @@ pub enum Band {
 }
 
 impl Band {
-    /// The tempo prior this band asks for.
+    /// The tempo weighting this band asks the tempo stage for.
     ///
     /// `None` for [`Band::Hard`]: music that is genuinely fast is exactly what
-    /// a prior ruins, and the fast end is where the estimate needs no help.
-    pub fn prior(self) -> Option<Prior> {
+    /// a weighting ruins, and the fast end is where the estimate needs no help.
+    pub fn weighting(self) -> Option<Weighting> {
         let centre_bpm = match self {
             Band::Calm => 115.0,
             Band::Club => 140.0,
             Band::Hard => return None,
         };
-        Some(Prior {
+        Some(Weighting {
             centre_bpm,
             width_octaves: 0.7,
         })
@@ -254,13 +255,13 @@ mod tests {
         assert_eq!(cold.band, Band::Calm, "scored {:.2}", cold.score);
     }
 
-    /// Every band asks for settings, and only the fast one declines a prior.
+    /// Every band asks for settings, and only the fast one declines a weighting.
     #[test]
-    fn only_the_hard_band_declines_a_prior() {
-        assert_eq!(Band::Calm.prior().map(|p| p.centre_bpm), Some(115.0));
-        assert_eq!(Band::Club.prior().map(|p| p.centre_bpm), Some(140.0));
-        assert_eq!(Band::Hard.prior(), None);
+    fn only_the_hard_band_declines_a_weighting() {
+        assert_eq!(Band::Calm.weighting().map(|p| p.centre_bpm), Some(115.0));
+        assert_eq!(Band::Club.weighting().map(|p| p.centre_bpm), Some(140.0));
+        assert_eq!(Band::Hard.weighting(), None);
         // The width is the band's, not the caller's, and it is the same one.
-        assert_eq!(Band::Calm.prior().map(|p| p.width_octaves), Some(0.7));
+        assert_eq!(Band::Calm.weighting().map(|p| p.width_octaves), Some(0.7));
     }
 }

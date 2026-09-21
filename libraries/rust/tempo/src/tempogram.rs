@@ -11,15 +11,21 @@
 use crate::novelty::Novelty;
 use serde::Serialize;
 
+/// A bell curve over tempo that multiplies the salience of every candidate,
+/// pulling the ranking toward `centre_bpm`.
+///
+/// Nobody supplies one. The energy measured in `libraries/rust/energy` puts a
+/// track in a band and the band names the centre, which is why this has no
+/// default and no flag behind it.
 #[derive(Clone, Copy, Debug, Serialize)]
-pub struct TempoPrior {
+pub struct TempoWeighting {
     pub centre_bpm: f64,
-    /// Standard deviation in octaves. Wide, because a narrow prior is exactly
+    /// Standard deviation in octaves. Wide, because a narrow curve is exactly
     /// how a 174 BPM track gets reported as 87.
     pub width_octaves: f64,
 }
 
-impl TempoPrior {
+impl TempoWeighting {
     pub fn weight(&self, bpm: f64) -> f64 {
         let octaves = (bpm / self.centre_bpm).log2() / self.width_octaves;
         (-0.5 * octaves * octaves).exp()
@@ -42,10 +48,11 @@ pub struct TempoSettings {
     /// true tempo of anything with eighth-note movement, whose offbeats sit in
     /// the same gaps, so it is weighted rather than absolute.
     pub penalty: f64,
-    /// Off by default. A prior improves the average case and is precisely what
-    /// makes the hard cases fail silently, so switching it on is a decision the
-    /// report records.
-    pub prior: Option<TempoPrior>,
+    /// Off unless the energy band names a centre. Pulling the ranking toward one
+    /// improves the average case and is precisely what makes the hard cases fail
+    /// silently, so a run that uses it reports `candidates_unweighted` and
+    /// `bpm_unweighted` next to the answer.
+    pub weighting: Option<TempoWeighting>,
     /// Metrical level the answer is reported at. See [`MetricalFloor`].
     pub floor: Option<MetricalFloor>,
     /// Largest gap, in BPM, the reported tempo may be moved by to land on a
@@ -106,7 +113,7 @@ impl Default for TempoSettings {
             // the track is most self-similar at, and the penalty argues against
             // the true level of anything with offbeat movement.
             penalty: 0.0,
-            prior: None,
+            weighting: None,
             floor: Some(MetricalFloor {
                 // Nothing in club music is counted below this; a track that
                 // measures at 70 is being counted in half bars.
@@ -165,7 +172,8 @@ pub struct TempoCandidate {
     pub bpm: f64,
     /// Comb salience, the primary ranking score.
     pub salience: f64,
-    /// Salience after the prior. Equal to `salience` when no prior is set.
+    /// Salience after the tempo weighting. Equal to `salience` when the energy
+    /// band named no centre.
     pub weighted_salience: f64,
     /// Plain autocorrelation at this candidate's lag: periodicity with no comb
     /// and no penalty, so a candidate that scores well only through its
@@ -309,7 +317,7 @@ pub fn fourier_salience(
     .normalised()
 }
 
-/// The best `count` tempi, ranked by salience after the prior.
+/// The best `count` tempi, ranked by salience after the tempo weighting.
 ///
 /// Candidates must be local maxima and are refined by fitting a parabola to the
 /// three grid points around each: the grid is 0.1 BPM, and a 0.05 BPM error over
@@ -340,7 +348,7 @@ pub fn candidates(
         let bpm = curve.bpm[i] + offset * settings.resolution_bpm;
         let lag = 60.0 * novelty.frame_rate / bpm;
         let acf = novelty.autocorrelation((lag.ceil() as usize).max(1));
-        let weight = settings.prior.map(|p| p.weight(bpm)).unwrap_or(1.0);
+        let weight = settings.weighting.map(|p| p.weight(bpm)).unwrap_or(1.0);
         peaks.push(TempoCandidate {
             bpm,
             salience: here,

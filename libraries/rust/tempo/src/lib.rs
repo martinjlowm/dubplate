@@ -15,8 +15,8 @@ pub use beats::{BarPhase, BeatGrid};
 pub use diagnostics::{Diagnostic, Severity};
 pub use novelty::{FluxAccumulator, Novelty};
 pub use tempogram::{
-    MetricalFloor, OctaveRelative, OctaveShift, TempoCandidate, TempoCurve, TempoPrior,
-    TempoSettings, TempoWindow,
+    MetricalFloor, OctaveRelative, OctaveShift, TempoCandidate, TempoCurve, TempoSettings,
+    TempoWeighting, TempoWindow,
 };
 
 use serde::Serialize;
@@ -54,17 +54,18 @@ pub struct TempoAnalysis {
     pub salience: f64,
     pub octave_shift: Option<OctaveShift>,
     pub candidates: Vec<TempoCandidate>,
-    /// The ranking the prior would have produced had it been off. Present only
-    /// when a prior is set, and the reason a prior is never applied silently.
-    pub candidates_without_prior: Option<Vec<TempoCandidate>>,
-    /// The answer the track would have had with no prior, floor and snap
+    /// The ranking with the tempo weighting off. Present only when the energy
+    /// band named a centre, and the reason the weighting is never applied
+    /// silently.
+    pub candidates_unweighted: Option<Vec<TempoCandidate>>,
+    /// The answer the track would have had unweighted, floor and snap
     /// applied, so it compares against [`TempoAnalysis::bpm`] directly.
     ///
-    /// The first entry of `candidates_without_prior` is not that answer: it is
+    /// The first entry of `candidates_unweighted` is not that answer: it is
     /// the salience ranking before the metrical floor has had its say, and on a
     /// track the floor doubles the two differ by an octave while the reported
     /// tempo does not move at all.
-    pub bpm_without_prior: Option<f64>,
+    pub bpm_unweighted: Option<f64>,
     pub octave_relatives: Vec<OctaveRelative>,
     pub grid: BeatGrid,
     pub bar: BarPhase,
@@ -120,9 +121,9 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
     );
     let candidates = tempogram::candidates(&comb, &fourier, broadband, settings, 5);
 
-    let candidates_without_prior = settings.prior.map(|_| {
+    let candidates_unweighted = settings.weighting.map(|_| {
         let unweighted = TempoSettings {
-            prior: None,
+            weighting: None,
             ..settings.clone()
         };
         tempogram::candidates(&comb, &fourier, broadband, &unweighted, 5)
@@ -131,10 +132,10 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
     let strongest = candidates.first().map(|c| c.bpm).unwrap_or(f64::NAN);
     let (bpm_measured, octave_shift) = tempogram::apply_floor(&comb, strongest, settings.floor);
 
-    // What the answer would have been without the prior, taken all the way
+    // What the answer would have been unweighted, taken all the way
     // through the floor and the snap. Comparing anything earlier against the
     // reported tempo compares two different stages.
-    let bpm_without_prior = candidates_without_prior.as_ref().and_then(|unweighted| {
+    let bpm_unweighted = candidates_unweighted.as_ref().and_then(|unweighted| {
         let first = unweighted.first()?.bpm;
         let (measured, _) = tempogram::apply_floor(&comb, first, settings.floor);
         Some(tempogram::snap_to_integer(measured, settings.integer_snap_bpm).unwrap_or(measured))
@@ -164,8 +165,8 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
         salience: comb.salience_at(bpm),
         octave_shift,
         candidates,
-        candidates_without_prior,
-        bpm_without_prior,
+        candidates_unweighted,
+        bpm_unweighted,
         octave_relatives,
         grid,
         bar,

@@ -108,7 +108,7 @@ footer {{ margin-top: 48px; font-size: 12px; color: #64748b; }}
         &[
             "BPM",
             "salience",
-            "after prior",
+            "after weighting",
             "autocorrelation",
             "Fourier",
         ],

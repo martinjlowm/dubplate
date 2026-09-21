@@ -21,7 +21,7 @@ use report::{
 };
 use spectral::{ChromaMapper, LogBands, Stft, TuningEstimator};
 use std::fmt;
-use tempo::{FluxAccumulator, Novelty, TempoPrior, TempoSettings};
+use tempo::{FluxAccumulator, Novelty, TempoSettings, TempoWeighting};
 
 /// The one way this can fail. A typed error rather than `anyhow`, because a
 /// library saying what went wrong is what lets the CLI and a browser each
@@ -227,10 +227,10 @@ pub fn run(
         &broadband.values,
         frame_rate,
     );
-    // The only prior there is. Nothing switches it off, because switching it off
-    // is not a setting a person should have to reason about: the report carries
-    // `bpm_without_prior` and the finding names it whenever the two differ.
-    let prior = measured_energy.band.prior();
+    // Nothing switches this off, because switching it off is not a setting a
+    // person should have to reason about: the report carries `bpm_unweighted`
+    // and the finding names it whenever the two differ.
+    let weighting = measured_energy.band.weighting();
 
     let settings = TempoSettings {
         min_bpm: options.min_bpm,
@@ -238,7 +238,7 @@ pub fn run(
         resolution_bpm: options.bpm_resolution,
         pulses: options.pulses,
         penalty: options.comb_penalty,
-        prior: prior.map(|asked| TempoPrior {
+        weighting: weighting.map(|asked| TempoWeighting {
             centre_bpm: asked.centre_bpm,
             width_octaves: asked.width_octaves,
         }),
@@ -252,29 +252,26 @@ pub fn run(
 
     // A rule that moves the reported number says so, and says what it read to
     // decide. Info rather than warning: the band did what it was asked to.
-    {
-        let centre = measured_energy.band.prior();
-        tempo_analysis.diagnostics.insert(
-            0,
-            tempo::Diagnostic::info(
-                "energy-band-applied",
-                match centre {
-                    Some(asked) => format!(
-                        "energy {:.2} puts this in the {} band, which asks for a tempo prior centred at {:.0} BPM over {:.1} octaves; without it the salience curve's own answer stands",
-                        measured_energy.score,
-                        measured_energy.band.name(),
-                        asked.centre_bpm,
-                        asked.width_octaves
-                    ),
-                    None => format!(
-                        "energy {:.2} puts this in the {} band, which asks for no tempo prior",
-                        measured_energy.score,
-                        measured_energy.band.name()
-                    ),
-                },
-            ),
-        );
-    }
+    tempo_analysis.diagnostics.insert(
+        0,
+        tempo::Diagnostic::info(
+            "energy-band-applied",
+            match weighting {
+                Some(asked) => format!(
+                    "energy {:.2} puts this in the {} band, which weights the salience curve toward {:.0} BPM over {:.1} octaves; bpm_unweighted carries what the curve answers without it",
+                    measured_energy.score,
+                    measured_energy.band.name(),
+                    asked.centre_bpm,
+                    asked.width_octaves
+                ),
+                None => format!(
+                    "energy {:.2} puts this in the {} band, which weights nothing: the salience curve answers on its own",
+                    measured_energy.score,
+                    measured_energy.band.name()
+                ),
+            },
+        ),
+    );
 
     let bands = band_curves
         .iter()
