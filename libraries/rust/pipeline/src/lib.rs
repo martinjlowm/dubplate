@@ -21,6 +21,7 @@ use report::{
 };
 use spectral::{ChromaMapper, LogBands, Stft, TuningEstimator};
 use std::fmt;
+use structure::SectionFeatures;
 use tempo::{FluxAccumulator, Novelty, TempoSettings, TempoWeighting};
 
 /// The one way this can fail. A typed error rather than `anyhow`, because a
@@ -103,8 +104,23 @@ pub fn run(
     figures: Figures,
 ) -> Result<Outcome, Error> {
     let drawing = figures == Figures::Drawn;
+
+    // The head of the file, before anything is transformed. Every stage below
+    // reads `samples` rather than `audio.samples`, so the cut happens once and
+    // the grid, the waveforms and the sections are all relative to the same
+    // place. A slice rather than an excerpt: copying a ten-minute track to drop
+    // two seconds off the front is fifty megabytes of nothing.
+    let lead_in_seconds = if options.trim_lead_in {
+        audio.lead_in_seconds()
+    } else {
+        0.0
+    };
+    let skipped = ((lead_in_seconds * audio.sample_rate as f64) as usize).min(audio.samples.len());
+    let samples = &audio.samples[skipped..];
+    let analysed_seconds = samples.len() as f64 / audio.sample_rate as f64;
+
     let mut stft = Stft::new(options.window, options.hop);
-    let frames = stft.frame_count(audio.samples.len());
+    let frames = stft.frame_count(samples.len());
     let frame_rate = stft.frame_rate(audio.sample_rate);
     // Two windows of the stability trace. Less than that and the answer rests on
     // one measurement with nothing to compare it against.
@@ -119,7 +135,7 @@ pub fn run(
         None => {
             let mut estimator = TuningEstimator::default();
             let step = (frames / TUNING_FRAMES).max(1);
-            stft.for_each_frame_stepped(&audio.samples, step, |_, magnitudes| {
+            stft.for_each_frame_stepped(samples, step, |_, magnitudes| {
                 estimator.push(magnitudes, audio.sample_rate, options.window);
             });
             estimator.cents()
@@ -144,6 +160,10 @@ pub fn run(
     let chroma_mapper = ChromaMapper::new(audio.sample_rate, options.window, tuning_cents);
 
     let mut flux = FluxAccumulator::new(onset_bands.len(), options.compression);
+    // The same band energies the flux reads, kept on a tenth-of-a-second grid
+    // so the structure stage has something to compare bars with. One add per
+    // band per frame, and nothing held per frame.
+    let mut section_features = SectionFeatures::new(onset_bands.len(), frame_rate);
     let mut band_energies = vec![0.0f32; onset_bands.len()];
     let mut image_energies = vec![0.0f32; image_bands.len()];
     let mut chroma = [0.0f64; 12];
@@ -160,9 +180,10 @@ pub fn run(
     ];
     let mut column_counts = vec![0.0f64; if drawing { image_width } else { 0 }];
 
-    stft.for_each_frame(&audio.samples, |frame, magnitudes| {
+    stft.for_each_frame(samples, |frame, magnitudes| {
         onset_bands.energies(magnitudes, &mut band_energies);
         flux.push(&band_energies);
+        section_features.push(frame, &band_energies);
 
         chroma_mapper.accumulate(magnitudes, &mut chroma);
         for (slot, magnitude) in spectrum_sum.iter_mut().zip(magnitudes) {
@@ -221,12 +242,8 @@ pub fn run(
 
     // Measured before the tempo stage and from nothing the tempo stage touches,
     // so the band a track lands in cannot inherit a tempo that is wrong.
-    let measured_energy = energy::measure(
-        &audio.samples,
-        &spectrum_amplitudes,
-        &broadband.values,
-        frame_rate,
-    );
+    let measured_energy =
+        energy::measure(samples, &spectrum_amplitudes, &broadband.values, frame_rate);
     // Nothing switches this off, because switching it off is not a setting a
     // person should have to reason about: the report carries `bpm_unweighted`
     // and the finding names it whenever the two differ.
@@ -273,6 +290,18 @@ pub fn run(
         ),
     );
 
+    if lead_in_seconds > 0.0 {
+        tempo_analysis.diagnostics.insert(
+            0,
+            tempo::Diagnostic::info(
+                "lead-in-trimmed",
+                format!(
+                    "the file opens with {lead_in_seconds:.2}s more than 60 dB below its peak, which was skipped before the grid was laid; every time in this report counts from there, and source.trim_to_first_beat_seconds is the cut that puts beat one at zero"
+                ),
+            ),
+        );
+    }
+
     let bands = band_curves
         .iter()
         .enumerate()
@@ -290,6 +319,21 @@ pub fn run(
         .collect();
 
     let key = key_detect::analyze(chroma, tuning_cents, options.key_profile);
+
+    // After the tempo stage, because a section boundary is a bar boundary and
+    // there are no bars until there is a grid. Reads what the grid produced and
+    // changes none of it.
+    let bar_starts = structure::bar_starts(
+        &tempo_analysis.grid.beats_seconds,
+        tempo_analysis.bar.beats_per_bar,
+        tempo_analysis.bar.phase,
+    );
+    let structure = structure::analyse(
+        &section_features.finish(),
+        &bar_starts,
+        analysed_seconds,
+        &options.cue_settings(),
+    );
 
     let spectrum = summarise_spectrum(&average_spectrum);
     let spectrogram = drawing.then(|| {
@@ -311,8 +355,12 @@ pub fn run(
             sample_rate: audio.sample_rate,
             channels: audio.source_channels,
             duration_seconds: source.duration_seconds,
-            analysed_start_seconds: source.start_seconds,
-            analysed_seconds: audio.duration_seconds(),
+            analysed_start_seconds: source.start_seconds + lead_in_seconds,
+            analysed_seconds,
+            lead_in_seconds,
+            trim_to_first_beat_seconds: source.start_seconds
+                + lead_in_seconds
+                + tempo_analysis.grid.offset_seconds,
         },
         settings: AnalysisSettings {
             window_size: options.window,
@@ -327,9 +375,10 @@ pub fn run(
         bands,
         energy: measured_energy.clone(),
         spectrum,
+        structure,
         waveforms: Waveforms {
-            preview: waveform::preview(&audio.samples, audio.sample_rate),
-            detail: waveform::detail(&audio.samples, audio.sample_rate),
+            preview: waveform::preview(samples, audio.sample_rate),
+            detail: waveform::detail(samples, audio.sample_rate),
         },
     };
 

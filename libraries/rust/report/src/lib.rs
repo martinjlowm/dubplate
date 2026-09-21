@@ -33,6 +33,17 @@ pub struct SourceInfo {
     /// an answer about the track.
     pub analysed_start_seconds: f64,
     pub analysed_seconds: f64,
+    /// Near-silence measured at the head of the file, whether or not it was
+    /// cut. Reported either way, because a track that opens with two seconds of
+    /// black is worth knowing about even when nothing trimmed it.
+    pub lead_in_seconds: f64,
+    /// Seconds to cut from the head of the source file to put beat one at
+    /// sample zero. The lead-in plus whatever the grid's own offset adds.
+    ///
+    /// The one place that decides where a trimmed file starts. The exporter
+    /// cuts here and shifts every time it writes by the same number, so the
+    /// audio and the grid cannot disagree about it.
+    pub trim_to_first_beat_seconds: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -103,6 +114,10 @@ pub struct AnalysisReport {
     /// set is ordered along.
     pub energy: energy::Energy,
     pub spectrum: SpectrumSummary,
+    /// Where the track changes, what each stretch is, and the cues that follow
+    /// from it. Measured over the beat grid, so it is empty when no grid was
+    /// found.
+    pub structure: structure::StructureAnalysis,
     pub waveforms: Waveforms,
 }
 
@@ -118,6 +133,7 @@ impl AnalysisReport {
             .diagnostics
             .iter()
             .chain(self.key.diagnostics.iter())
+            .chain(self.structure.diagnostics.iter())
             .collect();
         all.sort_by_key(|d| match d.severity {
             Severity::Warning => 0,

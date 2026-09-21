@@ -8,6 +8,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+structure.workspace = true
 audio.workspace = true
 energy.workspace = true
 key-detect.workspace = true

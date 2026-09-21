@@ -23,6 +23,7 @@ energy = { path = "libraries/rust/energy" }
 goertzel = { path = "libraries/rust/goertzel" }
 image = { path = "libraries/rust/image" }
 spectral = { path = "libraries/rust/spectral" }
+structure = { path = "libraries/rust/structure" }
 tempo = { path = "libraries/rust/tempo" }
 key-detect = { path = "libraries/rust/key-detect" }
 pipeline = { path = "libraries/rust/pipeline" }

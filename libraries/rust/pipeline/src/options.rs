@@ -62,6 +62,19 @@ pub struct AnalysisOptions {
     pub key_profile: Profile,
     /// Override the measured tuning offset, in cents from A = 440 Hz.
     pub tuning_cents: Option<f64>,
+    /// Bars between a memory cue and the hot cue it runs into.
+    pub memory_offset_bars: usize,
+    /// Length of the loop the two loop pads mark out, in bars.
+    pub loop_bars: usize,
+    /// Share of the track before which a drop is a taste of the hook rather
+    /// than the drop.
+    pub drop_after_fraction: f64,
+    /// Skip the near-silence at the head of the file before analysing.
+    ///
+    /// On by default: a grid laid from sample zero on a track that opens with
+    /// two seconds of black carries that offset into every bar, and a report
+    /// whose first beat is at 2.1 s is a report nothing downstream can cue to.
+    pub trim_lead_in: bool,
 }
 
 impl Default for AnalysisOptions {
@@ -82,6 +95,22 @@ impl Default for AnalysisOptions {
             integer_snap: 0.25,
             key_profile: Profile::Temperley,
             tuning_cents: None,
+            memory_offset_bars: 16,
+            loop_bars: 4,
+            drop_after_fraction: 0.2,
+            trim_lead_in: true,
+        }
+    }
+}
+
+impl AnalysisOptions {
+    /// The cue settings, which are three of the fields above under the name the
+    /// structure stage knows them by.
+    pub fn cue_settings(&self) -> structure::CueSettings {
+        structure::CueSettings {
+            memory_offset_bars: self.memory_offset_bars,
+            loop_bars: self.loop_bars,
+            drop_after_fraction: self.drop_after_fraction,
         }
     }
 }

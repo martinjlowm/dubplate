@@ -59,6 +59,7 @@ fn track(name: &str, bpm: f64, key: &str, notes: &str) -> Track_ {
         bitrate_kbps: 1411,
         file_size: 76_000_000,
         format: Format::Flac,
+        trim_seconds: 0.0,
         beats,
         cues: vec![Cue {
             kind: CueKind::Memory,

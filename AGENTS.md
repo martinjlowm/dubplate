@@ -18,6 +18,9 @@ is the wrong trade.
   `diagnostics.rs` that name a doubtful answer.
 - `libraries/rust/key-detect` chroma to key by profile correlation, with Camelot notation.
 - `libraries/rust/diagnostics` the finding type every stage reports doubts in.
+- `libraries/rust/structure` where the track changes and what each stretch is:
+  `features.rs` reduces the transform pass to one vector per bar, `segment.rs` finds the
+  boundaries, `label.rs` names the stretches, `cues.rs` puts them on the eight pads.
 - `libraries/rust/energy` how hard a track hits, from brightness, crest factor, onset
   density and the share above 4 kHz. Tempo is deliberately not among them.
 - `libraries/rust/report` the JSON report, the SVG plots, the PNG spectrogram, the HTML page.
@@ -165,6 +168,26 @@ edit to `Cargo.toml`.
     `CC_wasm32_unknown_unknown`. cc-rs otherwise takes whatever the shell calls `cc`, which is
     clang on macOS and gcc on Linux, and gcc cannot target wasm32; that is why this gate passed
     on a laptop and failed in CI for every run the repository had.
+21. **A section label is a claim and carries its evidence.** The structure stage reports
+    `low_band_db`, `broadband_db` and `rise_db` for every stretch beside the label they
+    produced, and a `confidence` saying how far those sat from the threshold that would have
+    named it something else. Under 0.35 raises `weak-section-label`. Every threshold is
+    relative to the track's own loudest section, never to full scale: a rule written in
+    decibels from full scale calls every stretch of a quiet master a breakdown. The cue pads
+    are fixed, so a pad whose section was not found stays empty and `cue-pads-empty` names
+    it; filling pad D with the nearest loud thing is how a drop cue lands somewhere nobody
+    would mix. Vocal detection is not among the inputs and cannot be: it needs the stem
+    separated, which section 4 puts out of scope, so the pad rekordbox tooling gives to the
+    first vocal is given here to the build that runs into the drop.
+22. **One number decides where a trimmed file starts.** `analyze` measures the near-silence
+    at the head of a file and skips it, so every time in the report counts from where the
+    music starts and `lead-in-trimmed` says it happened. `Track::trim_seconds` is then the
+    single place that says what the exported file is cut at: with `--trim` the audio is cut
+    there and the times stay as they are, and without it the file goes across whole and the
+    skipped head is added back to every time. Two places deciding that is every cue seconds
+    early. The source is never modified, which is rule 12 again; the cut is byte surgery on
+    the RIFF container, so channels and bit depth survive, and a decode-and-re-encode would
+    hand back the mono downmix this tool analyses.
 
 ## 3. What a change to the algorithm has to show
 
@@ -182,7 +205,11 @@ answer cannot hide a regression from it.
 In the sweep, read `bpm_measured` rather than `bpm`: the reported tempo is snapped to a whole
 number and would look right while the measurement behind it drifted. Produced electronic music
 is written at integer tempi, so the number that matters is the gap between the measurement and
-its nearest integer. Across the working set that gap is at most 0.164 BPM, at 200 BPM. A change
+its nearest integer. Across the working set that gap is at most 0.167 BPM, at 200 BPM. It was 0.164
+before the lead-in trim landed: skipping 0.27 s of silence changes which samples a
+200 BPM track is measured over, and the gap moved by 0.003 BPM on that one track.
+No reported tempo moved and `non-integer-tempo` fires on no track it did not fire
+on before. A change
 that widens it, or that makes `non-integer-tempo` fire on a track that used to snap, is a
 regression whatever the headline says:
 

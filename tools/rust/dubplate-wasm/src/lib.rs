@@ -270,9 +270,17 @@ impl Device {
             .len()
             .map_err(|e| JsError::new(&format!("{export_name}: {e}")))?;
 
-        let track =
-            collection::report::parse(export_name, size, report.as_bytes(), image::CONTENTS_PATH)
-                .map_err(|e| JsError::new(&format!("{export_name}: {e}")))?;
+        // The browser holds the file the page was given and writes it across
+        // whole, so the head the analysis skipped is added back to every time
+        // rather than cut off the audio.
+        let track = collection::report::parse(
+            export_name,
+            size,
+            report.as_bytes(),
+            image::CONTENTS_PATH,
+            collection::report::Trim::Keep,
+        )
+        .map_err(|e| JsError::new(&format!("{export_name}: {e}")))?;
 
         self.audio.0.push(Held {
             file_name: export_name.to_string(),

@@ -19,7 +19,25 @@ struct Report {
     source: Source,
     tempo: Tempo,
     key: Key,
+    #[serde(default)]
+    structure: Structure,
     waveforms: Waveforms,
+}
+
+/// The cues the structure stage placed. Defaulted rather than required, so a
+/// report written before that stage existed still exports.
+#[derive(Default, Deserialize)]
+struct Structure {
+    #[serde(default)]
+    cues: Vec<ReportCue>,
+}
+
+#[derive(Deserialize)]
+struct ReportCue {
+    kind: String,
+    number: u8,
+    name: String,
+    time_seconds: f64,
 }
 
 #[derive(Deserialize)]
@@ -27,6 +45,12 @@ struct Source {
     sample_rate: u32,
     channels: u16,
     duration_seconds: f64,
+    /// Defaulted, so a report written before the analysis measured this still
+    /// loads and exports the file whole.
+    #[serde(default)]
+    analysed_start_seconds: f64,
+    #[serde(default)]
+    trim_to_first_beat_seconds: f64,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +63,17 @@ struct Tempo {
 #[derive(Deserialize)]
 struct Grid {
     beats_seconds: Vec<f64>,
+}
+
+/// What to do about the silence the analysis skipped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trim {
+    /// Write the file whole and add the skipped head back to every time, so the
+    /// cues line up with the file as it is.
+    Keep,
+    /// Cut the file so beat one is sample zero, and leave every time counting
+    /// from there.
+    ToFirstBeat,
 }
 
 #[derive(Deserialize)]
@@ -101,7 +136,12 @@ impl From<serde_json::Error> for LoadError {
 /// filesystem are the name, the size and the report bytes, and a browser has
 /// all three without a filesystem to read them from.
 #[cfg(not(target_family = "wasm"))]
-pub fn load(audio: &Path, report: &Path, device_directory: &str) -> Result<Track, LoadError> {
+pub fn load(
+    audio: &Path,
+    report: &Path,
+    device_directory: &str,
+    trim: Trim,
+) -> Result<Track, LoadError> {
     let file_name = audio
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
@@ -112,6 +152,7 @@ pub fn load(audio: &Path, report: &Path, device_directory: &str) -> Result<Track
         file_size,
         &std::fs::read(report)?,
         device_directory,
+        trim,
     )?;
     // The only field the filesystem knows and the bytes do not: where the file
     // came from, which is what the CLI copies or links from later.
@@ -128,6 +169,7 @@ pub fn parse(
     file_size: u64,
     report: &[u8],
     device_directory: &str,
+    trim: Trim,
 ) -> Result<Track, LoadError> {
     let parsed: Report = serde_json::from_slice(report)?;
     let file_name = file_name.to_string();
@@ -149,6 +191,18 @@ pub fn parse(
         0
     };
 
+    // The report counts from where the analysis started, which is past
+    // whatever silence it skipped. Either the file goes across whole and that
+    // head is added back, or it is cut and the grid's own offset comes off too.
+    // One number either way, applied to every time below.
+    let (shift_seconds, trim_seconds) = match trim {
+        Trim::Keep => (parsed.source.analysed_start_seconds, 0.0),
+        Trim::ToFirstBeat => (
+            parsed.source.analysed_start_seconds - parsed.source.trim_to_first_beat_seconds,
+            parsed.source.trim_to_first_beat_seconds,
+        ),
+    };
+
     let beats_per_bar = parsed.tempo.bar.beats_per_bar.max(1);
     let beats = parsed
         .tempo
@@ -157,7 +211,7 @@ pub fn parse(
         .iter()
         .enumerate()
         .map(|(index, &time_seconds)| Beat {
-            time_seconds,
+            time_seconds: time_seconds + shift_seconds,
             bpm: parsed.tempo.bpm,
             // The bar phase names which beat carries the low end; every fourth
             // beat from there is beat one.
@@ -167,20 +221,38 @@ pub fn parse(
         })
         .collect::<Vec<_>>();
 
-    // One memory cue on the first beat. Nothing here detects cue points, and a
-    // player with no cue at all parks at the start of the file, which on a
-    // track with a silent lead-in is the wrong place.
-    let cues = beats
-        .first()
-        .map(|beat| {
-            vec![Cue {
-                kind: CueKind::Memory,
-                time_seconds: beat.time_seconds,
-                number: 1,
-                comment: String::new(),
-            }]
-        })
-        .unwrap_or_default();
+    // The cues the structure stage placed, which the report carries as the
+    // contract between the two halves. A player with no cue at all parks at the
+    // start of the file, so a report that named none still gets the first beat.
+    let cues: Vec<Cue> = if parsed.structure.cues.is_empty() {
+        beats
+            .first()
+            .map(|beat| {
+                vec![Cue {
+                    kind: CueKind::Memory,
+                    time_seconds: beat.time_seconds,
+                    number: 1,
+                    comment: String::new(),
+                }]
+            })
+            .unwrap_or_default()
+    } else {
+        parsed
+            .structure
+            .cues
+            .iter()
+            .map(|cue| Cue {
+                kind: if cue.kind == "hot" {
+                    CueKind::Hot
+                } else {
+                    CueKind::Memory
+                },
+                time_seconds: cue.time_seconds + shift_seconds,
+                number: cue.number,
+                comment: cue.name.clone(),
+            })
+            .collect()
+    };
 
     Ok(Track {
         source: PathBuf::from(&file_name),
@@ -200,6 +272,7 @@ pub fn parse(
         bitrate_kbps,
         file_size,
         format,
+        trim_seconds,
         beats,
         cues,
         preview: parsed.waveforms.preview,

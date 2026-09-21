@@ -43,6 +43,7 @@ fn track(name: &str, bpm: f64, camelot: &str) -> Track {
         bitrate_kbps: 1411,
         file_size: 52_000_000,
         format: Format::Flac,
+        trim_seconds: 0.0,
         beats,
         cues: Vec::new(),
         preview: Waveform::from_columns(4.0, &columns),

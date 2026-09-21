@@ -84,6 +84,41 @@ pub fn print(report: &AnalysisReport, out: &Path, no_figures: bool, to: &mut dyn
         let _ = writeln!(to, "  also      {}", runners.join(", "));
     }
 
+    // One line per section, with the two measurements the label was read from,
+    // so a label that looks wrong can be argued with from the terminal.
+    for section in &report.structure.sections {
+        let _ = writeln!(
+            to,
+            "  {:9} {:10} bar {:<4} conf {:3.0}%  kick {:6.1} dB  band {:6.1} dB",
+            structure::format_time(section.start_seconds),
+            section.label.as_str(),
+            section.start_bar,
+            section.confidence * 100.0,
+            section.low_band_db,
+            section.broadband_db
+        );
+    }
+
+    // Hot cues only: the memory cues are the same eight roles a run-up earlier
+    // and printing both says everything twice.
+    let pads: Vec<String> = report
+        .structure
+        .cues
+        .iter()
+        .filter(|cue| cue.kind == structure::CueKind::Hot)
+        .map(|cue| {
+            format!(
+                "{}={} {}",
+                (b'A' + cue.number - 1) as char,
+                structure::format_time(cue.time_seconds),
+                cue.name
+            )
+        })
+        .collect();
+    if !pads.is_empty() {
+        let _ = writeln!(to, "  pads      {}", pads.join(", "));
+    }
+
     for finding in report.diagnostics() {
         let mark = match finding.severity {
             Severity::Warning => "!",

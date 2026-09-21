@@ -104,6 +104,14 @@ pub struct Track {
     pub bitrate_kbps: u32,
     pub file_size: u64,
     pub format: Format,
+    /// Seconds to cut from the head of [`Track::source`] before writing it to
+    /// the device. Zero when the file goes across whole.
+    ///
+    /// Every time in this track counts from here, so a writer that copies the
+    /// file without cutting puts every cue this many seconds early. One field
+    /// rather than two, for the same reason [`Track::device_path`] is one: two
+    /// places deciding where a file starts is two places disagreeing.
+    pub trim_seconds: f64,
     pub beats: Vec<Beat>,
     pub cues: Vec<Cue>,
     pub preview: Waveform,

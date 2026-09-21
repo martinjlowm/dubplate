@@ -15,6 +15,107 @@ use std::path::Path;
 #[cfg(feature = "compressed")]
 mod compressed;
 
+/// Cut the head off a WAV without decoding it.
+///
+/// Byte surgery on the container rather than a decode and a re-encode: the
+/// samples that survive are the bytes that were there, so the channel count,
+/// the bit depth and the sample values all come through untouched. Decoding
+/// would hand back the mono downmix this crate analyses, and a stereo track
+/// written back from that has lost the width a mix is made of.
+///
+/// Returns the whole file when `start_seconds` is zero or negative.
+pub fn trim_wav(wav: &[u8], start_seconds: f64) -> Result<Vec<u8>, DecodeError> {
+    let layout = WavLayout::read(wav)?;
+    let frames = (start_seconds.max(0.0) * f64::from(layout.sample_rate)).round() as usize;
+    let skip = (frames * layout.bytes_per_frame()).min(layout.data_len);
+    let kept = &wav[layout.data_at + skip..layout.data_at + layout.data_len];
+
+    // A fresh header rather than a patched one: the source may carry LIST or
+    // INFO chunks whose offsets a shortened data chunk would invalidate.
+    let mut out = Vec::with_capacity(44 + kept.len());
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&((36 + kept.len()) as u32).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&layout.channels.to_le_bytes());
+    out.extend_from_slice(&layout.sample_rate.to_le_bytes());
+    let bytes_per_second = layout.sample_rate * layout.bytes_per_frame() as u32;
+    out.extend_from_slice(&bytes_per_second.to_le_bytes());
+    out.extend_from_slice(&(layout.bytes_per_frame() as u16).to_le_bytes());
+    out.extend_from_slice(&layout.bits_per_sample.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&(kept.len() as u32).to_le_bytes());
+    out.extend_from_slice(kept);
+    Ok(out)
+}
+
+/// Where the samples are in a WAV and what shape they are.
+struct WavLayout {
+    channels: u16,
+    sample_rate: u32,
+    bits_per_sample: u16,
+    data_at: usize,
+    data_len: usize,
+}
+
+impl WavLayout {
+    fn bytes_per_frame(&self) -> usize {
+        usize::from(self.channels) * usize::from(self.bits_per_sample).div_ceil(8)
+    }
+
+    /// Walk the RIFF chunks. The sample tracks carry a LIST/INFO chunk between
+    /// `fmt ` and `data`, which is why this walks rather than assuming 44.
+    fn read(wav: &[u8]) -> Result<Self, DecodeError> {
+        let malformed = || DecodeError::Container("not a RIFF/WAVE file".into());
+        if wav.len() < 12 || &wav[..4] != b"RIFF" || &wav[8..12] != b"WAVE" {
+            return Err(malformed());
+        }
+        let word = |at: usize| -> Result<u32, DecodeError> {
+            wav.get(at..at + 4)
+                .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+                .ok_or_else(malformed)
+        };
+
+        let (mut channels, mut sample_rate, mut bits_per_sample) = (0u16, 0u32, 0u16);
+        let mut at = 12;
+        while at + 8 <= wav.len() {
+            let kind = &wav[at..at + 4];
+            let length = word(at + 4)? as usize;
+            let body = at + 8;
+            match kind {
+                b"fmt " if body + 16 <= wav.len() => {
+                    channels = u16::from_le_bytes(wav[body + 2..body + 4].try_into().unwrap());
+                    sample_rate = word(body + 4)?;
+                    bits_per_sample =
+                        u16::from_le_bytes(wav[body + 14..body + 16].try_into().unwrap());
+                }
+                b"data" => {
+                    if channels == 0 || sample_rate == 0 || bits_per_sample == 0 {
+                        return Err(DecodeError::Container(
+                            "the data chunk came before the fmt chunk".into(),
+                        ));
+                    }
+                    return Ok(WavLayout {
+                        channels,
+                        sample_rate,
+                        bits_per_sample,
+                        data_at: body,
+                        // Clamped to what is actually there: a truncated
+                        // download states a length its file does not carry.
+                        data_len: length.min(wav.len().saturating_sub(body)),
+                    });
+                }
+                _ => {}
+            }
+            // Chunks are padded to an even length, and the pad byte is not
+            // counted in the length field.
+            at = body + length + (length & 1);
+        }
+        Err(malformed())
+    }
+}
+
 /// A decoded track: mono samples in `[-1.0, 1.0]` at `sample_rate`.
 #[derive(Clone, Debug)]
 pub struct Audio {
@@ -121,6 +222,44 @@ impl Audio {
 
     pub fn duration_seconds(&self) -> f64 {
         self.samples.len() as f64 / self.sample_rate as f64
+    }
+
+    /// Seconds of near-silence before the track starts.
+    ///
+    /// A shop's WAV often opens with a second or more of digital black, and a
+    /// player told to auto-cue lands in it: the waveform shows a flat run, the
+    /// first beat is nowhere near the start of the file, and a grid laid from
+    /// sample zero carries that offset into every bar.
+    ///
+    /// Measured against the track's own peak rather than an absolute floor, so
+    /// a quiet master is not read as one long lead-in. The threshold is 60 dB
+    /// down, which is below the noise floor of anything mastered and above the
+    /// dither of a silent passage.
+    pub fn lead_in_seconds(&self) -> f64 {
+        const WINDOW_SECONDS: f64 = 0.01;
+        const BELOW_PEAK_DB: f64 = 60.0;
+
+        let window = ((self.sample_rate as f64 * WINDOW_SECONDS) as usize).max(1);
+        let levels: Vec<f32> = self
+            .samples
+            .chunks(window)
+            .map(|chunk| {
+                chunk
+                    .iter()
+                    .fold(0.0f32, |loudest, sample| loudest.max(sample.abs()))
+            })
+            .collect();
+
+        let peak = levels.iter().copied().fold(0.0f32, f32::max);
+        if peak <= 0.0 {
+            return 0.0;
+        }
+        let threshold = peak * 10.0f32.powf(-(BELOW_PEAK_DB as f32) / 20.0);
+        let first = levels.iter().position(|level| *level >= threshold);
+        match first {
+            Some(0) | None => 0.0,
+            Some(index) => index as f64 * window as f64 / self.sample_rate as f64,
+        }
     }
 
     /// A copy of `duration` seconds starting at `start`.

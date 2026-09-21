@@ -183,6 +183,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "structure" = rec {
+      packageId = "structure";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "structure";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "tempo" = rec {
       packageId = "tempo";
       build = internal.buildRustCrateWithFeatures {
@@ -1107,6 +1117,10 @@ rec {
           {
             name = "spectral";
             packageId = "spectral";
+          }
+          {
+            name = "structure";
+            packageId = "structure";
           }
           {
             name = "tempo";
@@ -2246,6 +2260,10 @@ rec {
             packageId = "spectral";
           }
           {
+            name = "structure";
+            packageId = "structure";
+          }
+          {
             name = "tempo";
             packageId = "tempo";
           }
@@ -2670,6 +2688,10 @@ rec {
           {
             name = "serde_json";
             packageId = "serde_json";
+          }
+          {
+            name = "structure";
+            packageId = "structure";
           }
           {
             name = "tempo";
@@ -3243,6 +3265,24 @@ rec {
             name = "syn";
             packageId = "syn 2.0.119";
             features = [ "extra-traits" ];
+          }
+        ];
+
+      };
+      "structure" = rec {
+        crateName = "structure";
+        version = "0.1.0";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./libraries/rust/structure; };
+        dependencies = [
+          {
+            name = "diagnostics";
+            packageId = "diagnostics";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
           }
         ];
 

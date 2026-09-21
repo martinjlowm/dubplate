@@ -6,6 +6,7 @@
 
 use crate::ExportArgs;
 use anyhow::{Context, Result, bail};
+use collection::report::Trim;
 use collection::{Collection, Playlist};
 use std::path::{Path, PathBuf};
 
@@ -35,7 +36,21 @@ pub enum AudioMode {
 const CONTENTS: &str = "/Contents";
 
 pub fn run(args: ExportArgs) -> Result<()> {
-    let tracks = discover(&args.audio, &args.reports)?;
+    // Trimming means writing a new file, so there has to be a mode that writes
+    // one. Refused rather than ignored: a run that silently exported untrimmed
+    // audio against a trimmed grid puts every cue seconds early.
+    if args.trim && args.audio_mode != AudioMode::Copy {
+        bail!(
+            "--trim writes a cut copy of each file, so it needs --audio-mode copy; \
+             the source is never modified"
+        );
+    }
+    let trim = if args.trim {
+        Trim::ToFirstBeat
+    } else {
+        Trim::Keep
+    };
+    let tracks = discover(&args.audio, &args.reports, trim)?;
     if tracks.is_empty() {
         bail!(
             "no analysed tracks found: {} holds no audio with a matching report in {}",
@@ -56,6 +71,12 @@ pub fn run(args: ExportArgs) -> Result<()> {
     std::fs::create_dir_all(&args.out)?;
     let date = args.date.clone().unwrap_or_else(today);
 
+    // The audio first, then the databases that describe it. A trimmed file is
+    // shorter and smaller than its source, and both databases state a length
+    // and a byte count, so the numbers are read off what was written rather
+    // than off what it was written from.
+    place_audio(&args.out, &mut collection, args.audio_mode)?;
+
     if matches!(args.target, Target::Rekordbox | Target::Both) {
         rekordbox::write_device(
             &args.out,
@@ -69,8 +90,6 @@ pub fn run(args: ExportArgs) -> Result<()> {
         engine::write_device(&args.out, &collection, &engine::Options { date })
             .context("writing the Engine Library database")?;
     }
-
-    place_audio(&args.out, &collection, args.audio_mode)?;
 
     println!(
         "{} tracks, {} playlist entries, written to {}",
@@ -91,7 +110,7 @@ pub fn run(args: ExportArgs) -> Result<()> {
 /// `138_03A_Artist-Title.json`. A file with no report is skipped loudly rather
 /// than exported with a default beat grid, which would look analysed and be
 /// wrong.
-fn discover(audio_directory: &Path, reports: &Path) -> Result<Vec<collection::Track>> {
+fn discover(audio_directory: &Path, reports: &Path, trim: Trim) -> Result<Vec<collection::Track>> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(audio_directory)
         .with_context(|| format!("reading {}", audio_directory.display()))?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
@@ -116,23 +135,41 @@ fn discover(audio_directory: &Path, reports: &Path) -> Result<Vec<collection::Tr
             continue;
         }
         tracks.push(
-            collection::report::load(&file, &report, CONTENTS)
+            collection::report::load(&file, &report, CONTENTS, trim)
                 .with_context(|| format!("reading the analysis of {stem}"))?,
         );
     }
     Ok(tracks)
 }
 
-fn place_audio(root: &Path, collection: &Collection, mode: AudioMode) -> Result<()> {
+fn place_audio(root: &Path, collection: &mut Collection, mode: AudioMode) -> Result<()> {
     if mode == AudioMode::None {
         return Ok(());
     }
     let contents = root.join(CONTENTS.trim_start_matches('/'));
     std::fs::create_dir_all(&contents)?;
-    for track in &collection.tracks {
+    for track in &mut collection.tracks {
         let destination = contents.join(&track.file_name);
         let _ = std::fs::remove_file(&destination);
         match mode {
+            AudioMode::Copy if track.trim_seconds > 0.0 => {
+                if track.format != collection::Format::Wav {
+                    bail!(
+                        "{} is a {} and this trims WAV only; a FLAC or an MP3 has to be cut \
+                         where it is decoded, which is the archive pipeline and not here",
+                        track.file_name,
+                        track.format.extension()
+                    );
+                }
+                // `trim_seconds` is the one number that says where the file
+                // starts. The times on this track already count from it.
+                let cut = audio::trim_wav(&std::fs::read(&track.source)?, track.trim_seconds)
+                    .map_err(|error| anyhow::anyhow!("{error}"))
+                    .with_context(|| format!("trimming {}", track.file_name))?;
+                track.duration_seconds -= track.trim_seconds;
+                track.file_size = cut.len() as u64;
+                std::fs::write(&destination, cut)?;
+            }
             AudioMode::Copy => {
                 std::fs::copy(&track.source, &destination)?;
             }

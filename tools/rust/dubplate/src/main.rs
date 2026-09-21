@@ -121,6 +121,25 @@ pub struct AnalysisArgs {
     /// Override the measured tuning offset, in cents from A = 440 Hz.
     #[arg(long)]
     pub tuning_cents: Option<f64>,
+
+    /// Bars between a memory cue and the hot cue it runs into, which is where
+    /// a mix starts rather than where the section does.
+    #[arg(long, default_value_t = AnalysisOptions::default().memory_offset_bars)]
+    pub memory_offset_bars: usize,
+
+    /// Length of the loop the two loop pads mark out, in bars.
+    #[arg(long, default_value_t = AnalysisOptions::default().loop_bars)]
+    pub loop_bars: usize,
+
+    /// Share of the track before which a drop is a taste of the hook rather
+    /// than the drop the mix is built around.
+    #[arg(long, default_value_t = AnalysisOptions::default().drop_after_fraction)]
+    pub drop_after_fraction: f64,
+
+    /// Analyse from sample zero even when the file opens with silence, which is
+    /// what to pass when the lead-in is the thing being looked at.
+    #[arg(long)]
+    pub no_trim_lead_in: bool,
 }
 
 impl From<&AnalysisArgs> for AnalysisOptions {
@@ -141,6 +160,10 @@ impl From<&AnalysisArgs> for AnalysisOptions {
             integer_snap: args.integer_snap,
             key_profile: args.key_profile,
             tuning_cents: args.tuning_cents,
+            memory_offset_bars: args.memory_offset_bars,
+            loop_bars: args.loop_bars,
+            drop_after_fraction: args.drop_after_fraction,
+            trim_lead_in: !args.no_trim_lead_in,
         }
     }
 }
@@ -253,6 +276,14 @@ pub struct ExportArgs {
     /// SOURCE_DATE_EPOCH when set, and to today otherwise.
     #[arg(long)]
     pub date: Option<String>,
+
+    /// Cut the silence off the head of each file so beat one is sample zero.
+    ///
+    /// Writes a new file and never touches the source, so it needs an
+    /// --audio-mode that writes one. WAV only: cutting a FLAC or an MP3 means
+    /// decoding it, and this tool decodes WAV.
+    #[arg(long)]
+    pub trim: bool,
 }
 
 #[derive(Args)]

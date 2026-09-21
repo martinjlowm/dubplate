@@ -37,11 +37,36 @@ running by hand.
 | `--audio-mode <MODE>` | `none` | `none`, `copy` or `symlink`. |
 | `--playlist <NAME>` | `All tracks` | Name of the playlist holding every track. |
 | `--date <YYYY-MM-DD>` | `SOURCE_DATE_EPOCH`, else today | Written as each track's added and analysed date. |
+| `--trim` | off | Cut the silence off the head of each file so beat one is sample zero. Needs `--audio-mode copy`, and WAV only. |
 
 Audio and reports are paired by stem: `126_05A_Artist-Title.flac` with
 `126_05A_Artist-Title.json`. A file with no report is skipped, with a line on
 stderr saying so. It is not exported with an empty beat grid, which would look
 analysed on the player and be wrong.
+
+### Trimming the lead-in
+
+A shop's WAV often opens with a second or more of digital black. Left alone, a
+player's auto-cue lands in it and the grid carries the offset into every bar.
+`analyze` measures that silence and skips it, so every time in the report
+already counts from where the music starts; `source.lead_in_seconds` says how
+much, and `lead-in-trimmed` says it happened.
+
+What `export` then does with the audio decides how those times are written:
+
+- Without `--trim`, the file goes across whole and the skipped head is added
+  back to every beat and cue, so they line up with the file as it is.
+- With `--trim`, the file is cut at `source.trim_to_first_beat_seconds` and the
+  times stay counting from there. Beat one is sample zero.
+
+Either way one number decides it, `Track::trim_seconds`, and both the audio and
+the grid read it. The source file is never modified: `--trim` writes a new file
+under `--out`, which is the same rule `rename` follows.
+
+The cut is byte surgery on the RIFF container rather than a decode and a
+re-encode, so the channel count, the bit depth and the sample values come
+through untouched. That is also why it is WAV only: cutting a FLAC or an MP3
+means decoding it, and the archive pipeline is where those are decoded.
 
 ## Where each database field comes from
 
@@ -97,11 +122,15 @@ statements are the format rather than a design.
 
 - **Album art.** The `Artwork` table exists and is empty; the artwork id on every
   track is zero.
-- **Hot cues.** The hot cue list is written and empty. Only one memory cue, on
-  the first beat, is set.
+- **Cue colours and names.** The cues themselves are written, hot and memory,
+  but the colour and the label a player shows live in the `PCO2` section, which
+  this tool does not produce. The pads land in the right places and read as
+  numbers rather than as "Drop".
 - **Index pages.** The database carries data pages only. Browsing by title or by
   artist is built from them by the player.
-- **Song structure, phrase analysis, `PSSI`.** Not written.
+- **Song structure, phrase analysis, `PSSI`.** Not written. The sections this
+  tool measures are its own, in `report.json`; rekordbox's phrase model is a
+  different thing in a section nothing here writes.
 - **Engine's scrolling waveform.** See above.
 - **Engine crates and smartlists.** One playlist per device, and no crates.
 

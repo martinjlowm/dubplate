@@ -339,6 +339,7 @@ dependencies = [
  "report",
  "serde_json",
  "spectral",
+ "structure",
  "tempo",
  "waveform",
 ]
@@ -761,6 +762,7 @@ dependencies = [
  "report",
  "serde",
  "spectral",
+ "structure",
  "tempo",
  "waveform",
 ]
@@ -897,6 +899,7 @@ dependencies = [
  "png",
  "serde",
  "serde_json",
+ "structure",
  "tempo",
  "waveform",
 ]
@@ -1083,6 +1086,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "structure"
+version = "0.1.0"
+dependencies = [
+ "diagnostics",
+ "serde",
 ]
 
 [[package]]
