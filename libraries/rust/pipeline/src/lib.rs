@@ -227,10 +227,10 @@ pub fn run(
         &broadband.values,
         frame_rate,
     );
-    let prior = options
-        .energy_bands
-        .then(|| measured_energy.band.prior())
-        .flatten();
+    // The only prior there is. Nothing switches it off, because switching it off
+    // is not a setting a person should have to reason about: the report carries
+    // `bpm_without_prior` and the finding names it whenever the two differ.
+    let prior = measured_energy.band.prior();
 
     let settings = TempoSettings {
         min_bpm: options.min_bpm,
@@ -252,7 +252,7 @@ pub fn run(
 
     // A rule that moves the reported number says so, and says what it read to
     // decide. Info rather than warning: the band did what it was asked to.
-    if options.energy_bands {
+    {
         let centre = measured_energy.band.prior();
         tempo_analysis.diagnostics.insert(
             0,

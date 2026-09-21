@@ -52,7 +52,6 @@ Runs shorter than 30 seconds of audio are refused rather than answered.
 | `--metrical-floor <N>` | `80` | Slowest level the answer may be reported at. `0` disables the doubling. |
 | `--metrical-floor-ratio <0..1>` | `0.5` | How strong the doubled candidate must be, relative to the original, for the doubling to happen. |
 | `--integer-snap <N>` | `0.25` | Largest gap, in BPM, the answer may be moved by to land on a whole number. `0.5` rounds every measurement, `0` reports the measurement. A measurement further from an integer than this keeps its decimals and raises `non-integer-tempo`. |
-| `--no-energy-bands` | bands on | Report the salience curve's own answer. With the bands on, calm asks for a 115 BPM prior, club for 140, hard for none. |
 
 ### Key
 
@@ -203,10 +202,10 @@ and changes nothing.
 | `loose-grid` | warning | Between half and 80% of beats found an onset within the tolerance: the answer stands but the grid fits loosely. |
 | `grid-misfit` | warning | Fewer than half the beats found an onset within tolerance. |
 | `unstable-tempo` | warning | Window estimates spread over more than 2 BPM. |
-| `prior-changed-answer` | warning | With the prior off, a different tempo wins by more than 1 BPM. |
 | `range-edge` | warning | The answer sits within 2 BPM of `--min-bpm` or `--max-bpm`. |
 | `level-fits-better` | warning | A two-thirds or three-halves level matched more beats than the answer at more than 1.05 times its pulse ratio. Halves and doubles are excluded, because a half grid reads higher on both measures whatever the truth is. |
 | `non-integer-tempo` | warning | The measurement sits further from a whole number than `--integer-snap` allows, so it was reported as measured. Produced music is written on integers, so this is a played or ripped source, or a grid that drifts. |
+| `prior-changed-answer` | warning | The band's prior, not the track, picked the level. Names `bpm_without_prior`. |
 | `metrical-floor-applied` | info | The floor doubled the answer. Carries both saliences. |
 | `octave-split-windows` | info | More than 15% of windows chose half or double the reported tempo. |
 | `flat-bar-phase` | info | Bar contrast is under 1.1, so beat one is a guess. |

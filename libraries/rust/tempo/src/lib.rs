@@ -57,6 +57,14 @@ pub struct TempoAnalysis {
     /// The ranking the prior would have produced had it been off. Present only
     /// when a prior is set, and the reason a prior is never applied silently.
     pub candidates_without_prior: Option<Vec<TempoCandidate>>,
+    /// The answer the track would have had with no prior, floor and snap
+    /// applied, so it compares against [`TempoAnalysis::bpm`] directly.
+    ///
+    /// The first entry of `candidates_without_prior` is not that answer: it is
+    /// the salience ranking before the metrical floor has had its say, and on a
+    /// track the floor doubles the two differ by an octave while the reported
+    /// tempo does not move at all.
+    pub bpm_without_prior: Option<f64>,
     pub octave_relatives: Vec<OctaveRelative>,
     pub grid: BeatGrid,
     pub bar: BarPhase,
@@ -122,6 +130,15 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
 
     let strongest = candidates.first().map(|c| c.bpm).unwrap_or(f64::NAN);
     let (bpm_measured, octave_shift) = tempogram::apply_floor(&comb, strongest, settings.floor);
+
+    // What the answer would have been without the prior, taken all the way
+    // through the floor and the snap. Comparing anything earlier against the
+    // reported tempo compares two different stages.
+    let bpm_without_prior = candidates_without_prior.as_ref().and_then(|unweighted| {
+        let first = unweighted.first()?.bpm;
+        let (measured, _) = tempogram::apply_floor(&comb, first, settings.floor);
+        Some(tempogram::snap_to_integer(measured, settings.integer_snap_bpm).unwrap_or(measured))
+    });
     // Snapped here rather than where the number is printed. The grid, the
     // window comparison, the file name and both device databases all take the
     // reported tempo, and a grid fitted at 137.99 under an answer of 138 is a
@@ -148,6 +165,7 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
         octave_shift,
         candidates,
         candidates_without_prior,
+        bpm_without_prior,
         octave_relatives,
         grid,
         bar,

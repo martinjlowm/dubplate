@@ -217,15 +217,16 @@ pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
         ));
     }
 
-    if let Some(unweighted) = &analysis.candidates_without_prior
-        && let Some(first) = unweighted.first()
-        && (first.bpm - bpm).abs() > 1.0
+    // The answer, not the ranking behind it. The floor runs after the prior,
+    // and on a track it doubles the unweighted winner sits an octave below a
+    // reported tempo that the prior never moved.
+    if let Some(without) = analysis.bpm_without_prior
+        && (without - bpm).abs() > 1.0
     {
         out.push(Diagnostic::warning(
             "prior-changed-answer",
             format!(
-                "without the tempo prior the winner is {:.2} BPM, not {}: the answer is the prior's, not the track's",
-                first.bpm, reported
+                "without the tempo prior the answer is {without:.2} BPM, not {bpm:.2}: the level is the prior's, not the track's"
             ),
         ));
     }

@@ -302,14 +302,11 @@ Detectors that report a plausible answer to everything usually have a prior, and
 usually a number somebody picked. There is no way to pick one here. A prior is applied,
 but only where a measurement asks for it:
 
-```sh
-just analyze track.wav --no-energy-bands      # the salience curve's own answer
-```
-
 The energy bands read how hard a track hits and hand the slow end a prior, which is what
-corrects a soul ballad reported at 199 BPM. The report carries `candidates_without_prior`
-either way, `energy-band-applied` names the band and the centre, and `prior-changed-answer`
-fires when the prior rather than the track picked the winner.
+corrects a soul ballad reported at 199 BPM. There is no flag for any of it, because the
+report says what happened: `energy-band-applied` names the band and the centre,
+`bpm_without_prior` is the answer the track would have had without one, and
+`prior-changed-answer` fires when those two differ.
 
 ### Check whether a file came from a lossy source
 

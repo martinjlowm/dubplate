@@ -58,19 +58,6 @@ pub struct AnalysisOptions {
     pub metrical_floor_ratio: f64,
     /// Largest gap, in BPM, the answer may be moved by to reach a whole number.
     pub integer_snap: f64,
-    /// Let the measured energy choose the tempo prior.
-    ///
-    /// On. A prior is how a detector reports the tempo it expected, which is
-    /// why the caller cannot name one: there is no number to pick. The bands
-    /// read `libraries/rust/energy`, which is built from brightness, crest
-    /// factor, onset density and the share above 4 kHz and touches nothing the
-    /// tempo stage produces, so the prior only reaches music whose spectrum
-    /// says it is slow. It still changes the answer, and still says so through
-    /// `energy-band-applied` when it does.
-    ///
-    /// Turn it off to see the salience curve's own answer, which the report
-    /// carries either way as `candidates_without_prior`.
-    pub energy_bands: bool,
     /// Key profile the chroma is correlated against.
     pub key_profile: Profile,
     /// Override the measured tuning offset, in cents from A = 440 Hz.
@@ -93,7 +80,6 @@ impl Default for AnalysisOptions {
             metrical_floor: 80.0,
             metrical_floor_ratio: 0.5,
             integer_snap: 0.25,
-            energy_bands: true,
             key_profile: Profile::Temperley,
             tuning_cents: None,
         }

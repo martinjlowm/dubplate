@@ -61,11 +61,13 @@ edit to `Cargo.toml`.
    `libraries/rust/energy` puts a track in one of three bands and each band names a centre,
    and its four inputs read nothing the tempo stage produces, because a track reported at
    twice its tempo would otherwise carry that error into the measurement meant to catch it.
-   It is on, it emits `energy-band-applied` whenever it picks a centre, and the report
-   carries `candidates_without_prior` either way. `--no-energy-bands` reports the salience
-   curve's own answer. On the working set the bands correct two tracks, change nothing among
-   the other twenty-one and leave the selftest untouched, which is two examples and not a
-   proof; three of those tracks have a tempo anybody has actually checked.
+   Nothing switches it off, because the report says what it did: `energy-band-applied` names
+   the band and the centre, `bpm_without_prior` carries the answer the track would have had
+   without one, and `prior-changed-answer` fires when those two differ. On the working set
+   the bands correct two tracks, change nothing among the other twenty-one and leave the
+   selftest untouched. The band centres were chosen by sweeping against the three tracks
+   whose tempo anybody has checked, so they are fitted to three examples and not a proof;
+   the twenty others are assumed right rather than verified.
 4. **The comb penalty defaults to 0.** Subtracting the autocorrelation between comb teeth
    rejects subharmonics, and it fires just as hard on the true tempo of anything with offbeat
    movement. At full weight it reports 106.64 BPM for a 160 BPM hardstyle track. Do not

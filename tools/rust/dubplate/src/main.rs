@@ -114,11 +114,6 @@ pub struct AnalysisArgs {
     #[arg(long, default_value_t = AnalysisOptions::default().integer_snap)]
     pub integer_snap: f64,
 
-    /// Report the salience curve's own answer, with no prior from the energy
-    /// bands. The report carries that ranking either way.
-    #[arg(long = "no-energy-bands", action = clap::ArgAction::SetFalse)]
-    pub energy_bands: bool,
-
     /// Key profile to correlate the chroma against.
     #[arg(long, default_value_t = AnalysisOptions::default().key_profile)]
     pub key_profile: Profile,
@@ -144,7 +139,6 @@ impl From<&AnalysisArgs> for AnalysisOptions {
             metrical_floor: args.metrical_floor,
             metrical_floor_ratio: args.metrical_floor_ratio,
             integer_snap: args.integer_snap,
-            energy_bands: args.energy_bands,
             key_profile: args.key_profile,
             tuning_cents: args.tuning_cents,
         }
