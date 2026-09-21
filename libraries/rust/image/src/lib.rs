@@ -103,6 +103,79 @@ impl Tracks for &[Audio] {
     }
 }
 
+/// How far through the payload a build is, reported as it is written.
+///
+/// A caller drawing a bar wants `written_bytes` over `total_bytes`; a caller
+/// naming what it is on wants `file_name`. Both count the bytes that reach the
+/// volume, so neither includes the slack [`size`] adds: nothing writes those,
+/// and a bar that stops at 89% because the volume is bigger than its contents is
+/// a bar that looks stuck.
+#[derive(Clone, Copy, Debug)]
+pub struct Progress<'a> {
+    /// Payload bytes written so far, databases included.
+    pub written_bytes: u64,
+    /// Payload bytes the whole build will write.
+    pub total_bytes: u64,
+    /// The file being written, by its path in the image.
+    pub file_name: &'a str,
+    /// Its position in the order the files are written, from 0.
+    pub file_index: usize,
+    /// How many files the build writes in total.
+    pub file_count: usize,
+}
+
+/// How often progress is reported inside one file.
+///
+/// A track is written a megabyte at a time and every megabyte lands in the
+/// volume as several writes, so reporting each one is thousands of calls into a
+/// browser for a bar that moves a pixel. Four megabytes is a step a person sees
+/// on a three-gigabyte image and a few hundred calls across the whole build.
+const PROGRESS_STEP: u64 = 4 * 1024 * 1024;
+
+/// A writer that counts what passes through it and reports as it goes.
+///
+/// One file's worth. `written` and `reported` are the build's running totals,
+/// borrowed rather than owned, so a bar drawn from them climbs across the whole
+/// image rather than restarting at every track.
+struct Meter<'a> {
+    into: &'a mut dyn Write,
+    written: &'a mut u64,
+    reported: &'a mut u64,
+    total: u64,
+    file_name: &'a str,
+    file_index: usize,
+    file_count: usize,
+    report: &'a mut dyn FnMut(Progress<'_>),
+}
+
+impl Meter<'_> {
+    fn announce(&mut self) {
+        *self.reported = *self.written;
+        (self.report)(Progress {
+            written_bytes: *self.written,
+            total_bytes: self.total,
+            file_name: self.file_name,
+            file_index: self.file_index,
+            file_count: self.file_count,
+        });
+    }
+}
+
+impl Write for Meter<'_> {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        let written = self.into.write(buffer)?;
+        *self.written += written as u64;
+        if *self.written - *self.reported >= PROGRESS_STEP {
+            self.announce();
+        }
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.into.flush()
+    }
+}
+
 /// How many bytes a volume holding this payload needs.
 ///
 /// A caller writing into a file allocates exactly this much before calling
@@ -132,7 +205,7 @@ pub fn build(device: &Memory, audio: &[Audio], label: &str) -> Result<Vec<u8>, E
     let audio_bytes = audio.iter().map(|track| track.bytes.len() as u64).sum();
     let mut storage = Cursor::new(vec![0u8; size(device, audio_bytes) as usize]);
     let mut tracks = audio;
-    build_into(&mut storage, device, &mut tracks, label)?;
+    build_into(&mut storage, device, &mut tracks, label, &mut |_| {})?;
     Ok(storage.into_inner())
 }
 
@@ -147,11 +220,19 @@ pub fn build(device: &Memory, audio: &[Audio], label: &str) -> Result<Vec<u8>, E
 /// Zeroes because the free clusters are the one part of the volume nothing
 /// writes, and leftovers in them are what make one collection build to two
 /// different images.
+///
+/// `progress` is called as the payload lands, at most every few megabytes and
+/// at least once per file, and a last time with `written_bytes` equal to
+/// `total_bytes`. It reports bytes that were actually written rather than a
+/// share of the files placed, because the files differ by two orders of
+/// magnitude in size and a browser writing three gigabytes is the caller this
+/// exists for. Pass `&mut |_| {}` to ignore it.
 pub fn build_into<S, T>(
     storage: &mut S,
     device: &Memory,
     audio: &mut T,
     label: &str,
+    progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<(), Error>
 where
     S: Read + Write + Seek,
@@ -186,16 +267,46 @@ where
             .map_err(|e| Error(format!("could not open the filesystem just made: {e}")))?;
         {
             let root = filesystem.root_dir();
+            let file_count = device.files.len() + listing.len();
+            let mut written = 0u64;
+            let mut reported = 0u64;
 
             // The databases first, then the audio at the path they point at,
             // which is the order the Nix builder uses and the order that keeps
             // the small files near the front of the volume.
-            for (path, bytes) in &device.files {
-                write_file(&root, path, |file| file.write_all(bytes))?;
+            for (file_index, (path, bytes)) in device.files.iter().enumerate() {
+                write_file(&root, path, |file| {
+                    let mut meter = Meter {
+                        into: file,
+                        written: &mut written,
+                        reported: &mut reported,
+                        total: payload,
+                        file_name: path,
+                        file_index,
+                        file_count,
+                        report: progress,
+                    };
+                    meter.write_all(bytes)?;
+                    meter.announce();
+                    Ok(())
+                })?;
             }
             for (index, (file_name, _)) in listing.iter().enumerate() {
-                write_file(&root, &format!("{CONTENTS}/{file_name}"), |file| {
-                    audio.write(index, file)
+                let path = format!("{CONTENTS}/{file_name}");
+                write_file(&root, &path, |file| {
+                    let mut meter = Meter {
+                        into: file,
+                        written: &mut written,
+                        reported: &mut reported,
+                        total: payload,
+                        file_name: &path,
+                        file_index: device.files.len() + index,
+                        file_count,
+                        report: progress,
+                    };
+                    audio.write(index, &mut meter)?;
+                    meter.announce();
+                    Ok(())
                 })?;
             }
         }
@@ -690,7 +801,7 @@ mod tests {
         let mut tracks = Streamed(vec![(name.into(), bytes.clone())]);
         let mut storage =
             std::io::Cursor::new(vec![0u8; size(&device(), bytes.len() as u64) as usize]);
-        build_into(&mut storage, &device(), &mut tracks, "MUSIC").unwrap();
+        build_into(&mut storage, &device(), &mut tracks, "MUSIC", &mut |_| {}).unwrap();
 
         let streamed = storage.into_inner();
         assert_eq!(
@@ -707,6 +818,66 @@ mod tests {
         );
     }
 
+    /// What a bar drawn from the build shows: every byte of the payload, once.
+    ///
+    /// The numbers a caller renders, so the test is the caller's: they only
+    /// climb, they end on the payload, and they arrive often enough during one
+    /// large file that a bar moves while a track is being written rather than
+    /// jumping when it finishes.
+    #[test]
+    fn progress_climbs_to_the_payload_and_reports_inside_a_file() {
+        let name = "174_11A_Rebelion-Bonkerz.wav";
+        let bytes = vec![7u8; 10 * 1024 * 1024];
+        let audio = [Audio {
+            file_name: name.into(),
+            bytes: bytes.clone(),
+        }];
+        let payload = device().len() as u64 + bytes.len() as u64;
+
+        let mut reports: Vec<(u64, u64, String, usize, usize)> = Vec::new();
+        let mut tracks: &[Audio] = &audio;
+        let mut storage =
+            std::io::Cursor::new(vec![0u8; size(&device(), bytes.len() as u64) as usize]);
+        build_into(&mut storage, &device(), &mut tracks, "MUSIC", &mut |p| {
+            reports.push((
+                p.written_bytes,
+                p.total_bytes,
+                p.file_name.to_string(),
+                p.file_index,
+                p.file_count,
+            ));
+        })
+        .unwrap();
+
+        assert!(
+            reports.windows(2).all(|pair| pair[0].0 <= pair[1].0),
+            "the count went backwards: {:?}",
+            reports.iter().map(|r| r.0).collect::<Vec<_>>()
+        );
+        let last = reports.last().expect("the build reported nothing");
+        assert_eq!(
+            (last.0, last.1),
+            (payload, payload),
+            "ended at {} of {}, with a payload of {payload}",
+            last.0,
+            last.1
+        );
+        assert_eq!(
+            last.4,
+            device().files.len() + 1,
+            "counted {} files against {} databases and one track",
+            last.4,
+            device().files.len()
+        );
+
+        let inside = reports.iter().filter(|r| r.2.ends_with(name)).count();
+        assert!(
+            inside >= 2,
+            "a {} MB track reported {inside} times, so a bar sits still while it is written",
+            bytes.len() / (1024 * 1024)
+        );
+    }
+
     /// Storage shorter than the payload is refused before it is formatted.
     ///
     /// `fatfs` counts the sectors it was handed, so the alternative is a volume
@@ -719,7 +890,7 @@ mod tests {
         }];
         let mut storage = std::io::Cursor::new(vec![0u8; 4096]);
         let mut tracks: &[Audio] = &audio;
-        let error = build_into(&mut storage, &device(), &mut tracks, "MUSIC")
+        let error = build_into(&mut storage, &device(), &mut tracks, "MUSIC", &mut |_| {})
             .expect_err("a 4 KB image accepted 8 KB of audio")
             .0;
         assert!(error.contains("4096") && error.contains("8204"), "{error}");

@@ -195,6 +195,27 @@ impl image::Tracks for Placed {
     }
 }
 
+/// One progress report as the page reads it.
+///
+/// Built here rather than handed over as five arguments: a caller that wants
+/// only a percentage destructures one field, and a field added later does not
+/// move anybody's arguments along.
+fn describe(state: image::Progress<'_>) -> JsValue {
+    let object = js_sys::Object::new();
+    let set = |key: &str, value: JsValue| {
+        let _ = js_sys::Reflect::set(&object, &JsValue::from_str(key), &value);
+    };
+    set(
+        "writtenBytes",
+        JsValue::from_f64(state.written_bytes as f64),
+    );
+    set("totalBytes", JsValue::from_f64(state.total_bytes as f64));
+    set("fileName", JsValue::from_str(state.file_name));
+    set("fileIndex", JsValue::from_f64(state.file_index as f64));
+    set("fileCount", JsValue::from_f64(state.file_count as f64));
+    object.into()
+}
+
 /// A device being assembled, one analysed track at a time.
 ///
 /// Stateful where the analysis is not, because the alternative is handing every
@@ -278,6 +299,20 @@ impl Device {
     /// `date` is the date recorded against every track, as `YYYY-MM-DD`. It is
     /// a parameter rather than a clock reading so that the same collection
     /// built twice is the same file twice.
+    ///
+    /// `progress`, if given, is called with
+    /// `{ writtenBytes, totalBytes, fileName, fileIndex, fileCount }` as the
+    /// payload lands: every few megabytes inside a file, once at the end of
+    /// each, and a last time with the two byte counts equal. The counts are
+    /// bytes actually written, so a bar drawn from them moves while a
+    /// ninety-megabyte track is being copied instead of standing still until it
+    /// finishes. They stop at the payload rather than the length of the image,
+    /// which is larger by the slack nothing writes.
+    ///
+    /// This call blocks its worker from the first byte to the last, so the page
+    /// sees nothing until it returns unless the worker forwards these. A
+    /// callback that throws is ignored: a bar is not a reason to abandon a
+    /// half-written image.
     pub fn image(
         &mut self,
         into: &SyncHandle,
@@ -285,6 +320,7 @@ impl Device {
         playlist: &str,
         date: &str,
         target: &str,
+        progress: Option<js_sys::Function>,
     ) -> Result<f64, JsError> {
         if self.tracks.is_empty() {
             return Err(JsError::new("no analysed tracks to write"));
@@ -329,7 +365,12 @@ impl Device {
             .and_then(|()| storage.truncate(size))
             .map_err(|e| JsError::new(&format!("could not make room for the image: {e}")))?;
 
-        image::build_into(&mut storage, &device, &mut self.audio, label)
+        let mut report = |state: image::Progress<'_>| {
+            if let Some(progress) = &progress {
+                let _ = progress.call1(&JsValue::NULL, &describe(state));
+            }
+        };
+        image::build_into(&mut storage, &device, &mut self.audio, label, &mut report)
             .map_err(|e| JsError::new(&format!("building the image: {e}")))?;
         storage
             .flush()
