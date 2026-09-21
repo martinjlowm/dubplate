@@ -65,6 +65,7 @@ pub fn write_device_to(
         let directory = directory.trim_start_matches('/');
         sink.file(&format!("{directory}/ANLZ0000.DAT"), &anlz::dat(track))?;
         sink.file(&format!("{directory}/ANLZ0000.EXT"), &anlz::ext(track))?;
+        sink.file(&format!("{directory}/ANLZ0000.2EX"), &anlz::two_ex(track))?;
     }
 
     let mut database_bytes = Vec::new();

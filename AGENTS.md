@@ -34,8 +34,8 @@ is the wrong trade.
 - `libraries/rust/collection` the device-neutral track model, and the reader that builds one
   from a report. Neither exporter knows how the numbers were measured.
 - `libraries/rust/waveform` the columns both target formats draw, computed once.
-- `libraries/rust/rekordbox` `export.pdb` and the `ANLZ` files, with rekordcrate as the test
-  oracle.
+- `libraries/rust/rekordbox` `export.pdb` and the three `ANLZ` files, with rekordcrate as the
+  test oracle.
 - `libraries/rust/engine` the Engine Library database, schema 2.21.2, with Denon's own DDL as
   the check.
 - `nix/library.nix` the archive pipeline: one derivation per track, three format outputs.
@@ -231,6 +231,21 @@ edit to `Cargo.toml`.
     zero bytes and points there, which is what both real exports measured here do for every
     table they leave a page short of full. `no_table_is_told_to_grow_into_another_tables_page`
     is the test; 80 kB a stick is the cost.
+26. **A player reads the waveform it was built to read, and an RX3 reads the three-band one.**
+    `ANLZ0000.2EX` carries `PWV7` and `PWV6`, three bytes a column against the colour pair's
+    two and six, and a player from that generation draws them in preference to `PWV5` and
+    `PWV4`. A stick whose `EXT` held a populated `PWV3`, `PWV5` and `PWV4` and no 2EX showed
+    the preview waveform and no scrolling one; a track copied onto the same stick out of a
+    rekordbox export drew both, and the 2EX was the only file it had that this exporter did not
+    write. The levels are this tool's own: rekordbox splits its bands elsewhere, so the same
+    track's `PWV7` cannot be derived from its `PWV5` and does not match column for column.
+    What `PWVC` calibrates is unestablished, and the loudest column per band is written there
+    rather than a constant, because two real files disagree about its scale.
+
+    The `EXT` is still short of a real one by `PCO2` twice, `PQT2` and `PSSI`. `PCO2` is not
+    written empty to close the gap: the file compared against here has it empty only because
+    it has no cues, and an empty extended cue list beside a populated `PCOB` is how a Nexus 2
+    player is told this track has none.
 
 ## 3. What a change to the algorithm has to show
 

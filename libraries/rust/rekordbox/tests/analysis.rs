@@ -158,6 +158,58 @@ fn the_colour_preview_is_the_width_the_format_reads() {
     assert_eq!(preview.header.total_size, 24 + 1200 * 6);
 }
 
+/// The 2EX file carries the three-band waveform, at the widths a player reads.
+///
+/// An XDJ-RX3 showed the preview waveform and no scrolling one from a stick
+/// whose EXT held a populated PWV3, PWV5 and PWV4. A track copied onto the same
+/// stick from a rekordbox export drew both, and the only file it had that this
+/// exporter did not write was this one.
+#[test]
+fn the_2ex_file_carries_the_three_band_waveforms() {
+    let track = track();
+    let bytes = rekordbox::anlz::two_ex(&track);
+    assert_eq!(
+        sections(&bytes),
+        vec![
+            "Path",
+            "Waveform3BandDetail",
+            "Waveform3BandPreview",
+            "Waveform3BandCalibration",
+        ],
+        "the 2EX is the path and the three-band pair, in the order rekordbox writes"
+    );
+
+    // Three bytes a column, at the same width as the detail waveform beside it,
+    // and 1200 for the preview, which is what PWV4 carries too.
+    let widths = |kind: &[u8; 4]| -> (u32, u32) {
+        let mut at = u32::from_be_bytes(bytes[4..8].try_into().unwrap()) as usize;
+        while at + 24 <= bytes.len() {
+            let total = u32::from_be_bytes(bytes[at + 8..at + 12].try_into().unwrap()) as usize;
+            if &bytes[at..at + 4] == kind {
+                return (
+                    u32::from_be_bytes(bytes[at + 12..at + 16].try_into().unwrap()),
+                    u32::from_be_bytes(bytes[at + 16..at + 20].try_into().unwrap()),
+                );
+            }
+            if total == 0 {
+                break;
+            }
+            at += total;
+        }
+        panic!("{} is missing", String::from_utf8_lossy(kind));
+    };
+    assert_eq!(
+        widths(b"PWV7"),
+        (3, track.detail.len() as u32),
+        "the scrolling three-band waveform is three bytes over every detail column"
+    );
+    assert_eq!(
+        widths(b"PWV6"),
+        (3, 1200),
+        "the three-band preview is three bytes over 1200 columns"
+    );
+}
+
 /// The seek index is written when the track carries one and zeroed when it
 /// does not.
 ///

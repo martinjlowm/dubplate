@@ -1,11 +1,14 @@
 //! The per-track analysis files a player reads for beat grid, cues and
 //! waveforms.
 //!
-//! Two files per track. `ANLZ0000.DAT` carries what every player since the
-//! CDJ-2000 reads: the path, the beat grid, the cue lists and the monochrome
-//! waveforms. `ANLZ0000.EXT` carries the later additions: the detailed
-//! waveform, and the colour pair a Nexus 2 or newer player draws in preference
-//! to the monochrome one.
+//! Three files per track. `ANLZ0000.DAT` carries what every player since the
+//! CDJ-2000 reads: the path, the seek index, the beat grid, the cue lists and
+//! the monochrome waveforms. `ANLZ0000.EXT` carries the later additions: the
+//! detailed waveform, and the colour pair a Nexus 2 player draws in preference
+//! to the monochrome one. `ANLZ0000.2EX` carries the three-band waveform a
+//! player from the XDJ-RX3 generation draws in preference to the colour pair,
+//! and a stick without one showed no scrolling waveform on an RX3 whatever the
+//! other two held.
 //!
 //! Everything here is big-endian, unlike the database, and every section is a
 //! four-character kind, a header length, a total length, then content.
@@ -133,6 +136,32 @@ struct PreviewHeader {
     constant: u32,
 }
 
+/// `PWV6`: the fields before the three-band preview. Two words where a
+/// scrolling waveform carries three, which is why it declares a 0x14 header.
+#[derive(DekuWrite)]
+#[deku(endian = "big")]
+struct ThreeBandPreviewHeader {
+    bytes_per_column: u32,
+    len_data: u32,
+}
+
+/// The three bytes a three-band column is, one level per band.
+///
+/// Unlike [`ColourDetailColumn`] there is no height: each band carries its own
+/// level and the player stacks them, which is what makes this waveform read as
+/// three overlaid shapes rather than one shape tinted.
+///
+/// The order is the one [`ColourPreviewColumn`] uses, low band first. rekordbox
+/// computes these from its own band split rather than from the colour waveform,
+/// so the levels here are this tool's own and will not match it column for
+/// column.
+#[derive(DekuWrite)]
+struct ThreeBandColumn {
+    low: u8,
+    mid: u8,
+    high: u8,
+}
+
 /// `PWV3`, `PWV4` and `PWV5`: the fields before a scrolling waveform.
 #[derive(DekuWrite)]
 #[deku(endian = "big")]
@@ -230,6 +259,16 @@ pub fn dat(track: &Track) -> Vec<u8> {
 /// beat grid, and `PSSI` for the phrases. The first three are cues and beats
 /// this exporter already measures in a layout nothing here has been checked
 /// against; `PSSI` is phrase detection it does not do at all.
+pub fn two_ex(track: &Track) -> Vec<u8> {
+    let mut sections = Vec::new();
+    sections.extend(path_section(&track.device_path));
+    sections.extend(three_band_detail(track));
+    sections.extend(three_band_preview(track));
+    sections.extend(three_band_scale(track));
+    file(sections)
+}
+
+/// The EXT file: the path again, the scrolling waveforms and the cues.
 pub fn ext(track: &Track) -> Vec<u8> {
     let mut sections = Vec::new();
     sections.extend(path_section(&track.device_path));
@@ -439,6 +478,77 @@ fn colour_waveform_preview(track: &Track) -> Vec<u8> {
     });
     body.extend_from_slice(&content);
     section(b"PWV4", 0x18, &body)
+}
+
+/// One three-band column, at the resolution a band level is stored in.
+///
+/// Levels run to 127 rather than 255: across the three-band waveforms measured
+/// here no band ever exceeds it, and a value a player clamps is a value it
+/// draws wrong.
+fn three_band(column: &Column) -> Vec<u8> {
+    const FULL: f64 = 127.0;
+    let column = column.clamped();
+    let level = |band: u8| {
+        ((f64::from(band) / 7.0) * (f64::from(column.height) / 31.0) * FULL).round() as u8
+    };
+    bytes(&ThreeBandColumn {
+        low: level(column.low),
+        mid: level(column.mid),
+        high: level(column.high),
+    })
+}
+
+/// `PWV7`: the three-band scrolling waveform, three bytes per column.
+fn three_band_detail(track: &Track) -> Vec<u8> {
+    let content: Vec<u8> = track
+        .detail
+        .columns()
+        .flat_map(|c| three_band(&c))
+        .collect();
+
+    let mut body = bytes(&DetailHeader {
+        bytes_per_column: 3,
+        len_data: track.detail.len() as u32,
+        constant: 0x0096_0000,
+    });
+    body.extend_from_slice(&content);
+    section(b"PWV7", 0x18, &body)
+}
+
+/// `PWV6`: the three-band preview, over the same 1200 columns as `PWV4`.
+fn three_band_preview(track: &Track) -> Vec<u8> {
+    let columns = waveform::resample(&track.preview, COLOUR_PREVIEW_COLUMNS);
+    let content: Vec<u8> = columns.iter().flat_map(three_band).collect();
+
+    let mut body = bytes(&ThreeBandPreviewHeader {
+        bytes_per_column: 3,
+        len_data: columns.len() as u32,
+    });
+    body.extend_from_slice(&content);
+    section(b"PWV6", 0x14, &body)
+}
+
+/// `PWVC`: what rekordcrate calls the three-band calibration.
+///
+/// Two bytes of header tail and then three big-endian words, one per band. In
+/// the real file measured here they sit about a fifth below each band's loudest
+/// column; in two others they run past 255, which no band level does, so the
+/// scale is not fixed and nothing establishes what a player does with them.
+/// This writes the loudest column per band, which is a measurement of the
+/// waveform beside it rather than a number copied out of somebody else's track.
+fn three_band_scale(track: &Track) -> Vec<u8> {
+    let mut loudest = [0u8; 3];
+    for column in track.detail.columns() {
+        for (slot, level) in loudest.iter_mut().zip(three_band(&column)) {
+            *slot = (*slot).max(level);
+        }
+    }
+
+    let mut body = vec![0u8; 2];
+    for level in loudest {
+        body.extend_from_slice(&u16::from(level).to_be_bytes());
+    }
+    section(b"PWVC", 0x0e, &body)
 }
 
 /// `PWV5`: the colour detail waveform, two bytes per column.

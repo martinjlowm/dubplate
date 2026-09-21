@@ -179,6 +179,10 @@ statements are the format rather than a design.
 - **Song structure, phrase analysis, `PSSI`.** Not written. The sections this
   tool measures are its own, in `report.json`; rekordbox's phrase model is a
   different thing in a section nothing here writes.
+- **`PCO2` and `PQT2`.** The extended cue list and the extended beat grid, both
+  of which a real `EXT` carries. The cues and the grid go out in `PCOB` and
+  `PQTZ` instead. `PCO2` is deliberately not written empty: that would tell a
+  Nexus 2 player the track has no cues at all.
 - **Engine's scrolling waveform.** See above.
 - **Engine crates and smartlists.** One playlist per device, and no crates.
 
