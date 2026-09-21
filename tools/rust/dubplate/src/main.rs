@@ -114,10 +114,6 @@ pub struct AnalysisArgs {
     #[arg(long, default_value_t = AnalysisOptions::default().integer_snap)]
     pub integer_snap: f64,
 
-    /// Width of the tempo prior, in octaves.
-    #[arg(long, default_value_t = AnalysisOptions::default().tempo_prior_width)]
-    pub tempo_prior_width: f64,
-
     /// Report the salience curve's own answer, with no prior from the energy
     /// bands. The report carries that ranking either way.
     #[arg(long = "no-energy-bands", action = clap::ArgAction::SetFalse)]
@@ -148,7 +144,6 @@ impl From<&AnalysisArgs> for AnalysisOptions {
             metrical_floor: args.metrical_floor,
             metrical_floor_ratio: args.metrical_floor_ratio,
             integer_snap: args.integer_snap,
-            tempo_prior_width: args.tempo_prior_width,
             energy_bands: args.energy_bands,
             key_profile: args.key_profile,
             tuning_cents: args.tuning_cents,

@@ -229,7 +229,7 @@ pub fn run(
     );
     let prior = options
         .energy_bands
-        .then(|| measured_energy.band.tempo_prior())
+        .then(|| measured_energy.band.prior())
         .flatten();
 
     let settings = TempoSettings {
@@ -238,9 +238,9 @@ pub fn run(
         resolution_bpm: options.bpm_resolution,
         pulses: options.pulses,
         penalty: options.comb_penalty,
-        prior: prior.map(|centre_bpm| TempoPrior {
-            centre_bpm,
-            width_octaves: options.tempo_prior_width,
+        prior: prior.map(|asked| TempoPrior {
+            centre_bpm: asked.centre_bpm,
+            width_octaves: asked.width_octaves,
         }),
         floor: (options.metrical_floor > 0.0).then_some(tempo::MetricalFloor {
             bpm: options.metrical_floor,
@@ -253,16 +253,18 @@ pub fn run(
     // A rule that moves the reported number says so, and says what it read to
     // decide. Info rather than warning: the band did what it was asked to.
     if options.energy_bands {
-        let centre = measured_energy.band.tempo_prior();
+        let centre = measured_energy.band.prior();
         tempo_analysis.diagnostics.insert(
             0,
             tempo::Diagnostic::info(
                 "energy-band-applied",
                 match centre {
-                    Some(centre) => format!(
-                        "energy {:.2} puts this in the {} band, which asks for a tempo prior centred at {centre:.0} BPM; without it the salience curve's own answer stands",
+                    Some(asked) => format!(
+                        "energy {:.2} puts this in the {} band, which asks for a tempo prior centred at {:.0} BPM over {:.1} octaves; without it the salience curve's own answer stands",
                         measured_energy.score,
-                        measured_energy.band.name()
+                        measured_energy.band.name(),
+                        asked.centre_bpm,
+                        asked.width_octaves
                     ),
                     None => format!(
                         "energy {:.2} puts this in the {} band, which asks for no tempo prior",

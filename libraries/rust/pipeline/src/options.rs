@@ -71,8 +71,6 @@ pub struct AnalysisOptions {
     /// Turn it off to see the salience curve's own answer, which the report
     /// carries either way as `candidates_without_prior`.
     pub energy_bands: bool,
-    /// Width of the tempo prior, in octaves.
-    pub tempo_prior_width: f64,
     /// Key profile the chroma is correlated against.
     pub key_profile: Profile,
     /// Override the measured tuning offset, in cents from A = 440 Hz.
@@ -96,7 +94,6 @@ impl Default for AnalysisOptions {
             metrical_floor_ratio: 0.5,
             integer_snap: 0.25,
             energy_bands: true,
-            tempo_prior_width: 0.7,
             key_profile: Profile::Temperley,
             tuning_cents: None,
         }
