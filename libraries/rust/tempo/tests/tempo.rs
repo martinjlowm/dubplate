@@ -137,16 +137,23 @@ fn the_answer_is_a_whole_number_and_the_measurement_survives() {
 }
 
 #[test]
-fn a_tempo_between_two_integers_keeps_its_measurement_and_says_why() {
-    // 127.5 BPM is a tempo no producer types in, and the snap has to leave it
-    // alone rather than move the grid a quarter of a beat per bar.
+fn a_tempo_between_two_integers_is_rounded_and_says_why() {
+    // 127.5 BPM is a tempo no producer types in. The answer is still a whole
+    // number, because the grid, the file name and both device databases take
+    // it, and the finding is what says the grid under it drifts.
     let (broadband, low) = novelty(127.5, 60.0);
     let analysis = tempo::analyze(&broadband, &low, &TempoSettings::default());
 
-    assert!(
-        (analysis.bpm - 127.5).abs() < 0.2,
-        "reported {:.2} BPM instead of the measurement",
+    assert_eq!(
+        analysis.bpm,
+        analysis.bpm.round(),
+        "reported {:.4} BPM, which is not a whole number",
         analysis.bpm
+    );
+    assert!(
+        (analysis.bpm_measured - 127.5).abs() < 0.2,
+        "measured {:.2} BPM, not the tempo the novelty was generated at",
+        analysis.bpm_measured
     );
     let codes: Vec<&str> = analysis.diagnostics.iter().map(|d| d.code).collect();
     assert!(

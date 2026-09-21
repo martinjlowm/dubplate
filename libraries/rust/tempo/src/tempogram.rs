@@ -55,20 +55,21 @@ pub struct TempoSettings {
     pub weighting: Option<TempoWeighting>,
     /// Metrical level the answer is reported at. See [`MetricalFloor`].
     pub floor: Option<MetricalFloor>,
-    /// Largest gap, in BPM, the reported tempo may be moved by to land on a
-    /// whole number.
+    /// Gap, in BPM, the rounding to a whole number may close without comment.
     ///
     /// Produced music is written at an integer tempo, so a measurement of
     /// 137.99 is a measurement of 138 and the decimals are this tool's error
-    /// rather than the track's. Closing that gap is worth doing because the
-    /// grid, the file name and both device databases all take the reported
-    /// number.
+    /// rather than the track's. The answer is rounded whatever the gap, because
+    /// the grid, the file name and both device databases all take the reported
+    /// number and none of them has a use for 122.66.
     ///
-    /// The default is deliberately narrower than half a BPM. A track measured
-    /// 0.4 BPM off an integer is a track that was played rather than rendered,
-    /// and rounding it would write a grid that drifts a beat every two minutes.
-    /// Those keep their measurement and raise `non-integer-tempo`. At 0 nothing
-    /// is snapped, and `bpm_measured` carries the measurement either way.
+    /// This is what separates the two cases, not a limit on the move. A
+    /// measurement 0.4 BPM off an integer is a track that was played rather
+    /// than rendered, or a grid that drifts, and rounding it writes a grid that
+    /// loses a beat every few minutes; it still rounds, and raises
+    /// `non-integer-tempo` so the report says why the grid fits loosely. At 0
+    /// nothing is rounded, which is how a tempo genuinely between two integers
+    /// keeps its grid. `bpm_measured` carries the measurement either way.
     pub integer_snap_bpm: f64,
 }
 
@@ -520,17 +521,17 @@ pub fn apply_floor(
     (current, shift)
 }
 
-/// The whole number `bpm` should be reported as, when one sits within
-/// `tolerance` of it.
+/// The whole number `bpm` is reported as.
 ///
-/// Returns `None` when nothing is close enough, which leaves the measurement as
-/// the answer and lets `non-integer-tempo` say why.
-pub fn snap_to_integer(bpm: f64, tolerance: f64) -> Option<f64> {
-    if !bpm.is_finite() || tolerance <= 0.0 {
-        return None;
-    }
-    let whole = bpm.round();
-    ((bpm - whole).abs() <= tolerance).then_some(whole)
+/// Every measurement rounds, however far it sits from the integer it lands on:
+/// the reported tempo is written into the grid, the file name and both device
+/// databases, and none of those has a use for 122.66. `snap_bpm` decides only
+/// whether the move is worth saying out loud, and `non-integer-tempo` says it.
+///
+/// Returns `None` when `snap_bpm` is 0, which is how a track genuinely between
+/// two integers keeps its measurement, and when `bpm` is not finite.
+pub fn round_to_integer(bpm: f64, snap_bpm: f64) -> Option<f64> {
+    (bpm.is_finite() && snap_bpm > 0.0).then(|| bpm.round())
 }
 
 /// The local maximum of the salience curve nearest `bpm`, refined between grid

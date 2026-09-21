@@ -56,7 +56,7 @@ pub struct AnalysisOptions {
     /// How strong the doubled candidate must be, relative to the original, for
     /// the metrical floor to double it.
     pub metrical_floor_ratio: f64,
-    /// Largest gap, in BPM, the answer may be moved by to reach a whole number.
+    /// Gap, in BPM, the rounding to a whole number may close without comment.
     pub integer_snap: f64,
     /// Key profile the chroma is correlated against.
     pub key_profile: Profile,

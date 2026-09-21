@@ -111,15 +111,17 @@ it fires.
 The interpolated peak is a real number and the tempo of a produced track is not. Somebody
 typed 126 into a sequencer, so a measurement of 126.02 is a measurement of 126 whose last two
 digits belong to this tool rather than to the track. The reported tempo is therefore the
-nearest whole number, provided it is within `--integer-snap` of what was measured, and
-`bpm_measured` keeps the measurement.
+nearest whole number, and `bpm_measured` keeps the measurement.
 
-The default tolerance is a quarter of a BPM. That is wider than the 0.1 BPM candidate grid and
-wider than the 0.065 BPM by which the selftest misses a generated pulse train at 200 BPM, so
-it closes this tool's error. It is much narrower than half a BPM, which would round everything
-and would move the grid of a track that really does sit between two integers, a played set or
-a tape rip, by enough to drift a beat every couple of minutes. Those keep their measurement
-and raise `non-integer-tempo`.
+Every measurement is rounded, whatever the gap, because the grid, the file name and both
+device databases take one number and none of them has a use for 122.66. What
+`--integer-snap` decides is whether the move passes without comment. The default tolerance is
+a quarter of a BPM, which is wider than the 0.1 BPM candidate grid and wider than the 0.065
+BPM by which the selftest misses a generated pulse train at 200 BPM, so a gap inside it is
+this tool's error being closed. A track that really does sit between two integers, a played
+set or a tape rip, is rounded onto a grid that drifts a beat every couple of minutes, and
+raises `non-integer-tempo` so the report says so. `--integer-snap 0` is how such a track
+keeps its measurement and its grid.
 
 The snap happens before the grid is fitted, so the grid, the file name and both device
 databases state one number. Across the eighteen-track working set it moved every answer onto

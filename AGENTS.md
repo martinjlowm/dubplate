@@ -47,9 +47,11 @@ edit to `Cargo.toml`.
 
 1. **No stage silently corrects another.** Two rules change the reported number and both say
    so. The metrical floor emits `metrical-floor-applied` with both saliences every time it
-   fires. The snap to a whole number keeps the measurement in `tempo.bpm_measured` and prints
-   it on the headline whenever it moved the answer, and refuses to move it further than
-   `--integer-snap`, which raises `non-integer-tempo` instead. A third such rule needs the
+   fires. The rounding to a whole number keeps the measurement in `tempo.bpm_measured` and
+   prints it on the headline whenever it moved the answer. It rounds whatever the gap, because
+   the grid, the file name and both device databases take the reported number and none of them
+   has a use for 122.66; a gap wider than `--integer-snap` raises `non-integer-tempo`, which
+   is what says the grid under that answer drifts. A third such rule needs the
    same treatment or it does not go in: a detector that quietly fixes itself is what this
    tool exists to troubleshoot.
 2. **Diagnostics never change the answer.** They read what the stage already produced. A rule

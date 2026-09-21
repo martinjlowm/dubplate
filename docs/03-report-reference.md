@@ -51,7 +51,7 @@ Runs shorter than 30 seconds of audio are refused rather than answered.
 | `--comb-penalty <0..1>` | `0` | Weight of the penalty subtracted halfway between teeth. |
 | `--metrical-floor <N>` | `80` | Slowest level the answer may be reported at. `0` disables the doubling. |
 | `--metrical-floor-ratio <0..1>` | `0.5` | How strong the doubled candidate must be, relative to the original, for the doubling to happen. |
-| `--integer-snap <N>` | `0.25` | Largest gap, in BPM, the answer may be moved by to land on a whole number. `0.5` rounds every measurement, `0` reports the measurement. A measurement further from an integer than this keeps its decimals and raises `non-integer-tempo`. |
+| `--integer-snap <N>` | `0.25` | Gap, in BPM, the rounding to a whole number may close without comment. Every measurement is rounded; a gap wider than this raises `non-integer-tempo`. `0` reports the measurement instead, grid included. |
 
 ### Key
 
@@ -121,9 +121,9 @@ Every `analyze` flag from the transform, onset and tempo tables applies to `self
 
 | Field | Meaning |
 |---|---|
-| `tempo.bpm` | The reported tempo, and the one the grid, the file name and both device databases take. A whole number unless `--integer-snap 0` was given or the measurement was too far from one to snap. |
-| `tempo.bpm_measured` | The tempo as measured, before the snap. Differs from `tempo.bpm` by at most `--integer-snap`. This is what `selftest` checks and what to read when a grid drifts. |
-| `tempo.settings.integer_snap_bpm` | The snap tolerance the run used. |
+| `tempo.bpm` | The reported tempo, and the one the grid, the file name and both device databases take. A whole number unless `--integer-snap 0` was given. |
+| `tempo.bpm_measured` | The tempo as measured, before the rounding. Differs from `tempo.bpm` by at most half a BPM, and by more than `--integer-snap` only where `non-integer-tempo` fires. This is what `selftest` checks and what to read when a grid drifts. |
+| `tempo.settings.integer_snap_bpm` | The tolerance the run used. |
 | `tempo.salience` | Comb salience at the reported tempo. Every ratio in the findings is measured against this. |
 | `tempo.octave_shift` | `null`, or the doubling the floor applied, with `from_bpm`, `to_bpm` and both saliences. |
 | `tempo.candidates[]` | Up to five peaks, ranked. Each has `bpm`, `salience`, `weighted_salience` (after the tempo weighting), `autocorrelation` (the plain correlation at that lag, with no comb) and `fourier_salience`. |
@@ -204,7 +204,7 @@ and changes nothing.
 | `unstable-tempo` | warning | Window estimates spread over more than 2 BPM. |
 | `range-edge` | warning | The answer sits within 2 BPM of `--min-bpm` or `--max-bpm`. |
 | `level-fits-better` | warning | A two-thirds or three-halves level matched more beats than the answer at more than 1.05 times its pulse ratio. Halves and doubles are excluded, because a half grid reads higher on both measures whatever the truth is. |
-| `non-integer-tempo` | warning | The measurement sits further from a whole number than `--integer-snap` allows, so it was reported as measured. Produced music is written on integers, so this is a played or ripped source, or a grid that drifts. |
+| `non-integer-tempo` | warning | The measurement sits further from the whole number it was rounded onto than `--integer-snap` accounts for, so the grid under the answer drifts. Produced music is written on integers, so this is a played or ripped source, or a grid that drifts. |
 | `weighting-changed-answer` | warning | The band's tempo weighting, not the track, picked the level. Names `bpm_unweighted`. |
 | `metrical-floor-applied` | info | The floor doubled the answer. Carries both saliences. |
 | `octave-split-windows` | info | More than 15% of windows chose half or double the reported tempo. |

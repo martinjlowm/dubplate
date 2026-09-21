@@ -93,17 +93,17 @@ pub fn inspect(analysis: &TempoAnalysis) -> Vec<Diagnostic> {
         }
     }
 
-    // The snap was asked for and refused. Rounding here would have moved the
-    // grid by more than the tolerance allows, which is a beat of drift every
-    // few minutes on a file a player reads the grid straight out of.
+    // The answer was rounded further than this tool's own error accounts for,
+    // so the grid under it is a beat of drift every few minutes on a file a
+    // player reads the grid straight out of.
     let snap = analysis.settings.integer_snap_bpm;
     let off_integer = (analysis.bpm_measured - analysis.bpm_measured.round()).abs();
     if snap > 0.0 && off_integer > snap {
         out.push(Diagnostic::warning(
             "non-integer-tempo",
             format!(
-                "{:.2} BPM sits {:.2} BPM from the nearest whole number, further than the {snap:.2} BPM the snap allows, so the measurement is the answer: produced music is written on integers, so this was played rather than rendered, or the grid drifts across the file",
-                analysis.bpm_measured, off_integer
+                "the measurement is {:.2} BPM, {:.2} BPM from the {:.0} it was rounded to and further than the {snap:.2} BPM this tool's own error accounts for: produced music is written on integers, so this was played rather than rendered, or the grid drifts across the file",
+                analysis.bpm_measured, off_integer, analysis.bpm
             ),
         ));
     }

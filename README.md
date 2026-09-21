@@ -286,15 +286,18 @@ jq '{reported: .tempo.bpm, measured: .tempo.bpm_measured}' analysis/*/report.jso
 ```
 
 A gap of a few hundredths is this tool's own error. A gap near the quarter-BPM tolerance is
-worth reading `tempo-over-time.svg` for. To turn the rounding off everywhere, including in the
-grid, the file name and both databases:
+worth reading `tempo-over-time.svg` for. The answer is a whole number either way, because the
+grid, the file name and both databases take it and none of them has a use for 122.66. A gap
+wider than the tolerance still rounds and raises `non-integer-tempo`, which usually means the
+track was played rather than rendered, and the grid under that answer loses a beat every few
+minutes.
+
+To keep the measurement instead, everywhere, including in the grid, the file name and both
+databases:
 
 ```sh
 just analyze track.wav --integer-snap 0
 ```
-
-A track measured further from a whole number than the tolerance allows keeps its decimals and
-raises `non-integer-tempo`, which usually means it was played rather than rendered.
 
 ### See what the tempo weighting did
 
@@ -581,12 +584,14 @@ the grid improved on twelve of eighteen tracks, held on three and lost a point o
 three. The largest gain took a 125 BPM deep house track from 88% of beats matched to 100%, and
 its grid from twice the track novelty to six and a half times it.
 
-The tolerance is a quarter of a BPM, which is wider than the 0.1 BPM candidate grid and than
-the 0.065 BPM the selftest misses a generated 200 BPM pulse train by, and much narrower than
-the half a BPM that would round everything. A track measuring 0.38 BPM off an integer was
-played rather than rendered, and rounding it would write a grid that drifts a beat every two
-minutes onto a stick. Those keep their measurement and raise `non-integer-tempo`. Across the
-working set every track snapped, by at most 0.164 BPM.
+Every measurement rounds. A player reads the grid out of the file, a shop writes the tempo in
+the file name and both device databases hold one number, and none of them has a use for
+122.66. What the tolerance decides is whether the move is worth saying out loud: a quarter of
+a BPM is wider than the 0.1 BPM candidate grid and than the 0.065 BPM the selftest misses a
+generated 200 BPM pulse train by, so a gap inside it is this tool's own error. A track
+measuring 0.38 BPM off an integer was played rather than rendered, and the grid written under
+its rounded answer drifts a beat every two minutes, so it raises `non-integer-tempo`. Across
+the working set every track lands inside the tolerance, by at most 0.164 BPM.
 
 One thing the snap costs: on some tracks a two-thirds relative now fits almost as well as the
 answer, because two beats in three of a 92 BPM grid land exactly on a 138 BPM beat once both

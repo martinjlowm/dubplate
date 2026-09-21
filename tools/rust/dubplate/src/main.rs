@@ -107,10 +107,10 @@ pub struct AnalysisArgs {
     #[arg(long, default_value_t = AnalysisOptions::default().metrical_floor_ratio)]
     pub metrical_floor_ratio: f64,
 
-    /// Largest gap, in BPM, the answer may be moved by to reach a whole number.
-    /// Produced music is written on integers, so the default closes this tool's
-    /// own error and nothing wider. Set to 0.5 to round whatever was measured,
-    /// or to 0 to report it as measured.
+    /// Gap, in BPM, the rounding to a whole number may close without comment.
+    /// Produced music is written on integers, so every answer is rounded; a
+    /// wider gap than this raises non-integer-tempo. Set to 0 to report the
+    /// measurement instead, grid included.
     #[arg(long, default_value_t = AnalysisOptions::default().integer_snap)]
     pub integer_snap: f64,
 

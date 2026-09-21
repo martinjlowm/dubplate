@@ -174,24 +174,25 @@ check. A snap near the tolerance, above roughly 0.15 BPM, is worth a look at
 well, and one whose windows drift across the track was rounded to a number it only passes
 through.
 
-`non-integer-tempo` is the opposite case. The measurement was too far from any integer to
-snap, so it stands as the answer:
+`non-integer-tempo` is the opposite case. The measurement sits further from the integer it
+was rounded onto than this tool's own error accounts for:
 
 This is `just selftest --bpm 127.5`, a pulse train generated exactly half way between two
 integers, which is the one place the finding can be produced on demand:
 
 ```
 generated 127.50 BPM, measured 127.50 BPM, error 0.002 BPM (0.00%)
-  non-integer-tempo 127.50 BPM sits 0.50 BPM from the nearest whole number, further than the
-  0.25 BPM the snap allows, so the measurement is the answer
+  non-integer-tempo the measurement is 127.50 BPM, 0.50 BPM from the 128 it was rounded to
+  and further than the 0.25 BPM this tool's own error accounts for
 ```
 
 Produced music is written on integers, so that means one of three things. The track was
 played rather than rendered, and a DJ set or a live recording has no single tempo to find.
-The file is a rip whose speed is off, which `--integer-snap 0.5` will round for you if you
-want the nominal tempo. Or the grid genuinely drifts, which step 6 is how you tell.
+The file is a rip whose speed is off, and the rounded answer is the nominal tempo you want.
+Or the grid genuinely drifts, which step 6 is how you tell.
 
-To see the measurement everywhere instead of the rounded answer, turn the snap off:
+In the first and third cases the grid written under the rounded answer loses a beat every few
+minutes. To keep the measurement everywhere instead, grid included, turn the rounding off:
 
 ```sh
 just analyze track.wav --integer-snap 0

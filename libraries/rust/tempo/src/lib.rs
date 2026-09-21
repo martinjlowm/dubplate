@@ -43,11 +43,13 @@ pub struct TempoAnalysis {
     /// floor raised it, which `octave_shift` then records, or the snap to a
     /// whole number moved it, which `bpm_measured` then shows.
     pub bpm: f64,
-    /// The tempo as measured, before the snap to a whole number.
+    /// The tempo as measured, before the rounding to a whole number.
     ///
-    /// The two differ by at most `settings.integer_snap_bpm`. This is the
-    /// number to read when a grid drifts and the number the selftest checks,
-    /// since a rounded answer would hide the error it exists to measure.
+    /// The two differ by at most half a BPM, and by more than
+    /// `settings.integer_snap_bpm` only on a track that raises
+    /// `non-integer-tempo`. This is the number to read when a grid drifts and
+    /// the number the selftest checks, since a rounded answer would hide the
+    /// error it exists to measure.
     pub bpm_measured: f64,
     /// Salience of the reported tempo, which is what every ratio in the
     /// diagnostics is measured against.
@@ -138,14 +140,14 @@ pub fn analyze(broadband: &Novelty, low_band: &Novelty, settings: &TempoSettings
     let bpm_unweighted = candidates_unweighted.as_ref().and_then(|unweighted| {
         let first = unweighted.first()?.bpm;
         let (measured, _) = tempogram::apply_floor(&comb, first, settings.floor);
-        Some(tempogram::snap_to_integer(measured, settings.integer_snap_bpm).unwrap_or(measured))
+        Some(tempogram::round_to_integer(measured, settings.integer_snap_bpm).unwrap_or(measured))
     });
     // Snapped here rather than where the number is printed. The grid, the
     // window comparison, the file name and both device databases all take the
     // reported tempo, and a grid fitted at 137.99 under an answer of 138 is a
     // grid a reader cannot check the answer against.
-    let bpm =
-        tempogram::snap_to_integer(bpm_measured, settings.integer_snap_bpm).unwrap_or(bpm_measured);
+    let bpm = tempogram::round_to_integer(bpm_measured, settings.integer_snap_bpm)
+        .unwrap_or(bpm_measured);
     let grid = beats::align(broadband, bpm, GRID_TOLERANCE_MS);
     let bar = beats::bar_phase(&grid, low_band, 4);
     let over_time = tempogram::tempo_over_time(
