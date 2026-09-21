@@ -194,13 +194,53 @@ pub fn run(
     // else in most club productions.
     let low_band = Novelty::sum(&band_curves[..2.min(band_curves.len())]);
 
+    let average_spectrum: Vec<(f64, f64)> = spectrum_sum
+        .iter()
+        .enumerate()
+        .skip(1)
+        .map(|(bin, sum)| {
+            let hz = stft.bin_frequency(bin, audio.sample_rate);
+            let amplitude = (sum / frames.max(1) as f64) as f32;
+            (hz, spectral::to_db(amplitude) as f64)
+        })
+        .collect();
+
+    // Amplitude per bin, which is what the energy reads. The decibel form above
+    // is for the plot and the summary.
+    let spectrum_amplitudes: Vec<(f64, f64)> = spectrum_sum
+        .iter()
+        .enumerate()
+        .skip(1)
+        .map(|(bin, sum)| {
+            (
+                stft.bin_frequency(bin, audio.sample_rate),
+                sum / frames.max(1) as f64,
+            )
+        })
+        .collect();
+
+    // Measured before the tempo stage and from nothing the tempo stage touches,
+    // so the band a track lands in cannot inherit a tempo that is wrong.
+    let measured_energy = energy::measure(
+        &audio.samples,
+        &spectrum_amplitudes,
+        &broadband.values,
+        frame_rate,
+    );
+    let prior = match (options.energy_bands, options.tempo_prior) {
+        // An explicit prior is the caller's and outranks the bands.
+        (_, Some(centre)) => Some(centre),
+        (true, None) => measured_energy.band.tempo_prior(),
+        (false, None) => None,
+    };
+
     let settings = TempoSettings {
         min_bpm: options.min_bpm,
         max_bpm: options.max_bpm,
         resolution_bpm: options.bpm_resolution,
         pulses: options.pulses,
         penalty: options.comb_penalty,
-        prior: options.tempo_prior.map(|centre_bpm| TempoPrior {
+        prior: prior.map(|centre_bpm| TempoPrior {
             centre_bpm,
             width_octaves: options.tempo_prior_width,
         }),
@@ -210,7 +250,31 @@ pub fn run(
         }),
         integer_snap_bpm: options.integer_snap,
     };
-    let tempo_analysis = tempo::analyze(&broadband, &low_band, &settings);
+    let mut tempo_analysis = tempo::analyze(&broadband, &low_band, &settings);
+
+    // A rule that moves the reported number says so, and says what it read to
+    // decide. Info rather than warning: the band did what it was asked to.
+    if options.energy_bands && options.tempo_prior.is_none() {
+        let centre = measured_energy.band.tempo_prior();
+        tempo_analysis.diagnostics.insert(
+            0,
+            tempo::Diagnostic::info(
+                "energy-band-applied",
+                match centre {
+                    Some(centre) => format!(
+                        "energy {:.2} puts this in the {} band, which asks for a tempo prior centred at {centre:.0} BPM; without it the salience curve's own answer stands",
+                        measured_energy.score,
+                        measured_energy.band.name()
+                    ),
+                    None => format!(
+                        "energy {:.2} puts this in the {} band, which asks for no tempo prior",
+                        measured_energy.score,
+                        measured_energy.band.name()
+                    ),
+                },
+            ),
+        );
+    }
 
     let bands = band_curves
         .iter()
@@ -229,17 +293,6 @@ pub fn run(
         .collect();
 
     let key = key_detect::analyze(chroma, tuning_cents, options.key_profile);
-
-    let average_spectrum: Vec<(f64, f64)> = spectrum_sum
-        .iter()
-        .enumerate()
-        .skip(1)
-        .map(|(bin, sum)| {
-            let hz = stft.bin_frequency(bin, audio.sample_rate);
-            let amplitude = (sum / frames.max(1) as f64) as f32;
-            (hz, spectral::to_db(amplitude) as f64)
-        })
-        .collect();
 
     let spectrum = summarise_spectrum(&average_spectrum);
     let spectrogram = drawing.then(|| {
@@ -275,6 +328,7 @@ pub fn run(
         tempo: tempo_analysis,
         key,
         bands,
+        energy: measured_energy.clone(),
         spectrum,
         waveforms: Waveforms {
             preview: waveform::preview(&audio.samples, audio.sample_rate),

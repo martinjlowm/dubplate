@@ -98,6 +98,10 @@ pub struct AnalysisReport {
     pub tempo: TempoAnalysis,
     pub key: KeyAnalysis,
     pub bands: Vec<BandTempo>,
+    /// How hard the track hits, on an axis that is not tempo. Reported whether
+    /// or not it was used to choose the tempo settings, because it is what a
+    /// set is ordered along.
+    pub energy: energy::Energy,
     pub spectrum: SpectrumSummary,
     pub waveforms: Waveforms,
 }

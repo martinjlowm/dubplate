@@ -58,6 +58,14 @@ pub struct AnalysisOptions {
     pub metrical_floor_ratio: f64,
     /// Largest gap, in BPM, the answer may be moved by to reach a whole number.
     pub integer_snap: f64,
+    /// Let the measured energy choose the tempo prior.
+    ///
+    /// Off, for the reason `tempo_prior` is off: a prior improves the average
+    /// case and is how a fast track gets reported at half. The bands exist so
+    /// that the prior only reaches music whose spectrum says it is slow, and
+    /// they are measured rather than guessed, but they still change the answer
+    /// and still say so when they do.
+    pub energy_bands: bool,
     /// Centre of a log-normal tempo prior, in BPM. Off unless set, because a
     /// prior is how a detector reports the tempo it expected.
     pub tempo_prior: Option<f64>,
@@ -85,6 +93,7 @@ impl Default for AnalysisOptions {
             metrical_floor: 80.0,
             metrical_floor_ratio: 0.5,
             integer_snap: 0.25,
+            energy_bands: false,
             tempo_prior: None,
             tempo_prior_width: 0.7,
             key_profile: Profile::Temperley,

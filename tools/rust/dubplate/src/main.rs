@@ -123,6 +123,11 @@ pub struct AnalysisArgs {
     #[arg(long, default_value_t = AnalysisOptions::default().tempo_prior_width)]
     pub tempo_prior_width: f64,
 
+    /// Let the measured energy choose the tempo prior, by band. Off unless
+    /// asked for, and `--tempo-prior` outranks it.
+    #[arg(long)]
+    pub energy_bands: bool,
+
     /// Key profile to correlate the chroma against.
     #[arg(long, default_value_t = AnalysisOptions::default().key_profile)]
     pub key_profile: Profile,
@@ -150,6 +155,7 @@ impl From<&AnalysisArgs> for AnalysisOptions {
             integer_snap: args.integer_snap,
             tempo_prior: args.tempo_prior,
             tempo_prior_width: args.tempo_prior_width,
+            energy_bands: args.energy_bands,
             key_profile: args.key_profile,
             tuning_cents: args.tuning_cents,
         }

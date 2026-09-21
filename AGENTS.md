@@ -18,6 +18,8 @@ is the wrong trade.
   `diagnostics.rs` that name a doubtful answer.
 - `libraries/rust/key-detect` chroma to key by profile correlation, with Camelot notation.
 - `libraries/rust/diagnostics` the finding type every stage reports doubts in.
+- `libraries/rust/energy` how hard a track hits, from brightness, crest factor, onset
+  density and the share above 4 kHz. Tempo is deliberately not among them.
 - `libraries/rust/report` the JSON report, the SVG plots, the PNG spectrogram, the HTML page.
 - `libraries/rust/pipeline` the pass itself: `lib.rs` runs every stage over one transform,
   `figures.rs` draws, `options.rs` holds the settings and their defaults. Samples in, a report
@@ -54,7 +56,14 @@ edit to `Cargo.toml`.
    that adjusts a result is not a diagnostic.
 3. **No tempo prior by default.** A prior improves the average case and is exactly how a
    174 BPM track gets reported as 87. `--tempo-prior` switches it on, and the report then
-   carries the ranking it would have produced without one.
+   carries the ranking it would have produced without one. `--energy-bands` is the same
+   switch driven by a measurement rather than by a number the caller picked: the energy in
+   `libraries/rust/energy` puts a track in one of three bands and each band names a prior.
+   It is off for the same reason, it emits `energy-band-applied` whenever it chooses one,
+   and its weights read nothing the tempo stage touches, because a track reported at twice
+   its tempo would otherwise carry that error into the measurement meant to catch it. On the
+   working set it corrects two tracks and moves nothing else, which is two examples and not
+   a proof.
 4. **The comb penalty defaults to 0.** Subtracting the autocorrelation between comb teeth
    rejects subharmonics, and it fires just as hard on the true tempo of anything with offbeat
    movement. At full weight it reports 106.64 BPM for a 160 BPM hardstyle track. Do not

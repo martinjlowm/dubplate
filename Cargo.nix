@@ -93,6 +93,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "energy" = rec {
+      packageId = "energy";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "energy";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "engine" = rec {
       packageId = "engine";
       build = internal.buildRustCrateWithFeatures {
@@ -1206,6 +1216,20 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "energy" = rec {
+        crateName = "energy";
+        version = "0.1.0";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./libraries/rust/energy; };
+        dependencies = [
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+        ];
+
+      };
       "engine" = rec {
         crateName = "engine";
         version = "0.1.0";
@@ -2201,6 +2225,10 @@ rec {
             packageId = "audio";
           }
           {
+            name = "energy";
+            packageId = "energy";
+          }
+          {
             name = "key-detect";
             packageId = "key-detect";
           }
@@ -2621,6 +2649,10 @@ rec {
           {
             name = "diagnostics";
             packageId = "diagnostics";
+          }
+          {
+            name = "energy";
+            packageId = "energy";
           }
           {
             name = "key-detect";
