@@ -226,7 +226,9 @@ impl Database {
                     PagePlan::Index { has_rows } => {
                         index_page(index, table.page_type, next, *has_rows)
                     }
-                    PagePlan::Boilerplate(bytes) => verbatim_page(index, next, bytes),
+                    PagePlan::Boilerplate(bytes) => {
+                        verbatim_page(index, table.page_type, next, bytes)
+                    }
                     PagePlan::Rows {
                         first_row,
                         row_count,
@@ -391,12 +393,71 @@ fn index_page(index: usize, page_type: PageType, next_page: usize, has_rows: boo
 }
 
 /// A page copied whole from a real export, patched to say where it sits.
-fn verbatim_page(index: usize, next_page: usize, bytes: &[u8; PAGE_SIZE]) -> Vec<u8> {
+fn verbatim_page(
+    index: usize,
+    page_type: PageType,
+    next_page: usize,
+    bytes: &[u8; PAGE_SIZE],
+) -> Vec<u8> {
     let mut page = bytes.to_vec();
     page[0x04..0x08].copy_from_slice(&(index as u32).to_le_bytes());
     page[0x0c..0x10].copy_from_slice(&(next_page as u32).to_le_bytes());
     page[0x10..0x14].copy_from_slice(&1u32.to_le_bytes());
+    if page_type == PageType::Unknown17 {
+        show_file_name(&mut page);
+    }
     page
+}
+
+/// The column this exporter adds to the browse menu, and the slot it takes.
+const FILE_NAME_COLUMN: u16 = 16;
+const FILE_NAME_SLOT: u16 = 11;
+/// Byte of a menu row that says the category is hidden.
+const MENU_HIDDEN_AT: usize = 5;
+/// Where the row carries its slot in the list a player draws.
+const MENU_SLOT_AT: usize = 6;
+
+/// Turn the file name on in the browse menu.
+///
+/// A row of `Unknown17` is a column id, a menu order, a flag byte and a slot in
+/// the list a player draws. Byte five is 1 when the category is hidden, and the
+/// slot is 0 exactly when it is: across the 64 rows of two real exports the two
+/// agree without exception, and rekordbox turns a category on by clearing the
+/// one and filling in the other.
+///
+/// rekordbox ships the file name hidden, which on this library is the wrong
+/// default. A dubplate is named `<BPM>_<KEY>_<track> - Artist - Title`, so the
+/// file name is the one browse axis carrying what this tool measured, and the
+/// ten slots rekordbox does fill leave the eleventh free.
+///
+/// The page itself stays as it was copied. This is the single deliberate
+/// difference from it, which is why it is here rather than edited into the
+/// bytes in `pages/`.
+fn show_file_name(page: &mut [u8]) {
+    for row in menu_rows(page) {
+        if u16::from_le_bytes([page[row], page[row + 1]]) != FILE_NAME_COLUMN {
+            continue;
+        }
+        page[row + MENU_HIDDEN_AT] = 0;
+        page[row + MENU_SLOT_AT..row + MENU_SLOT_AT + 2]
+            .copy_from_slice(&FILE_NAME_SLOT.to_le_bytes());
+    }
+}
+
+/// Where each row of a page starts, read out of its row groups.
+fn menu_rows(page: &[u8]) -> Vec<usize> {
+    let packed = u32::from_le_bytes([page[24], page[25], page[26], 0]);
+    let rows = (packed & 0x1fff) as usize;
+    (0..rows)
+        .map(|row| {
+            let group = row / ROWS_PER_GROUP;
+            let slot = row % ROWS_PER_GROUP;
+            let group_start = PAGE_SIZE - (group + 1) * ROW_GROUP_SIZE;
+            let at = group_start + (ROWS_PER_GROUP - 1 - slot) * 2;
+            let offset = u16::from_le_bytes([page[at], page[at + 1]]) as usize;
+            PAGE_HEADER_SIZE + DATA_HEADER_SIZE + offset
+        })
+        .collect()
 }
 
 /// Serialise one page.

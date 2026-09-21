@@ -390,6 +390,83 @@ mod against_a_real_export {
         }
     }
 
+    /// The file name is offered as a browse category, and nothing else moved.
+    ///
+    /// rekordbox ships it hidden. A dubplate carries its tempo, its key and its
+    /// track number in the name, so it is the one axis that browses by what was
+    /// measured. A row is hidden when byte five is 1, and its slot in the menu
+    /// is 0 exactly then; the two agreed on all 64 rows of the two exports this
+    /// was read from, so the test asserts both halves.
+    #[test]
+    fn the_file_name_is_a_browse_category_and_the_rest_of_the_menu_is_untouched() {
+        const FILE_NAME: u16 = 16;
+        let written = write_database(&collection());
+        let rows = menu_rows(&written);
+        assert!(!rows.is_empty(), "the browse menu table has rows");
+
+        let mut slots: Vec<u16> = Vec::new();
+        for (column, hidden, slot) in &rows {
+            assert_eq!(
+                *hidden == 1,
+                *slot == 0,
+                "column {column} says hidden={hidden} but sits in slot {slot}"
+            );
+            if *slot != 0 {
+                slots.push(*slot);
+            }
+        }
+
+        let file_name = rows
+            .iter()
+            .find(|(column, _, _)| *column == FILE_NAME)
+            .expect("the menu lists a file name column");
+        assert_eq!(file_name.1, 0, "the file name must not be hidden");
+        assert_ne!(file_name.2, 0, "the file name needs a slot in the menu");
+
+        slots.sort_unstable();
+        let before = slots.len();
+        slots.dedup();
+        assert_eq!(
+            before,
+            slots.len(),
+            "two categories share a slot: {slots:?}"
+        );
+    }
+
+    /// Column id, hidden byte and menu slot of every row of the browse table.
+    fn menu_rows(database: &[u8]) -> Vec<(u16, u8, u16)> {
+        let word = |at: usize| u32::from_le_bytes(database[at..at + 4].try_into().unwrap());
+        let half = |at: usize| u16::from_le_bytes(database[at..at + 2].try_into().unwrap());
+        let mut out = Vec::new();
+        for table in 0..word(0x08) as usize {
+            let entry = 0x1c + table * 16;
+            if word(entry) != 17 {
+                continue;
+            }
+            for page in word(entry + 8)..=word(entry + 12) {
+                let at = page as usize * PAGE_SIZE;
+                if word(at + 8) != 17 {
+                    continue;
+                }
+                let packed = u32::from_le_bytes([
+                    database[at + 24],
+                    database[at + 25],
+                    database[at + 26],
+                    0,
+                ]);
+                for row in 0..(packed & 0x1fff) as usize {
+                    let group = row / 16;
+                    let slot = row % 16;
+                    let group_start = at + PAGE_SIZE - (group + 1) * 36;
+                    let offset = half(group_start + (15 - slot) * 2) as usize;
+                    let ro = at + 0x28 + offset;
+                    out.push((half(ro), database[ro + 5], half(ro + 6)));
+                }
+            }
+        }
+        out
+    }
+
     /// The page a player takes when a table has to grow belongs to that table
     /// and to nothing else.
     ///

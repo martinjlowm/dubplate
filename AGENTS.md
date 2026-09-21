@@ -142,6 +142,14 @@ edit to `Cargo.toml`.
     is the one table built entirely from constants, so it can be compared byte for byte, and
     that comparison covers the page flags, the free and used counts, the data header and the
     row group.
+
+    `Unknown17` is the browse menu a player offers, and it is the one copied page this
+    exporter changes. A row is a column id, a menu order, a flag byte and a slot: byte five is
+    1 when the category is hidden and the slot is 0 exactly then, on all 64 rows of the two
+    exports read for it. rekordbox ships the file name hidden, which is the wrong default for a
+    library named `<BPM>_<KEY>_<track> - Artist - Title`, so `show_file_name` clears the flag
+    and takes the first free slot. The change lives in the code rather than in the bytes under
+    `pages/`, so the one deliberate difference from what rekordbox wrote is visible in a diff.
 17. **`Track::device_path` is the only place a file's location on the device is decided.**
     The database, the analysis files and the image builder all read it. Two of them computing
     a path separately is two of them disagreeing.

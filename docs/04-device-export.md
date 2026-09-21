@@ -44,6 +44,25 @@ Audio and reports are paired by stem: `126_05A_Artist-Title.flac` with
 stderr saying so. It is not exported with an empty beat grid, which would look
 analysed on the player and be wrong.
 
+### The browse menu
+
+A player offers a fixed set of categories to browse by, and which ones it offers is table 17
+of `export.pdb`. Each row names a column, a position in the menu, and a byte saying whether
+the category is hidden.
+
+rekordbox ships eleven categories on and the file name off. This exporter turns the file name
+on, in the first free slot, because a dubplate is named `<BPM>_<KEY>_<track> - Artist - Title`
+and that is the one axis carrying what was measured:
+
+| Slot | Category |
+|---|---|
+| 1-10 | Artist, Album, Track, Key, Playlist, History, Search, Matching, Folder, Date added |
+| 11 | File name |
+
+Nothing else in the table changes. Browsing by Folder is the one case where a player reads the
+file rather than the exported analysis, so a library that can only be found that way loses its
+beat grid, its cues and its waveform.
+
 ### The seek index
 
 A player scrubbing a variable-bitrate MP3 needs a map from time to byte offset, and that is
