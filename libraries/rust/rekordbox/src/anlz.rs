@@ -36,14 +36,21 @@ const PHRASE_BYTES: u32 = 24;
 /// one the export measured against uses and the one the six labels here fit.
 const MOOD_HIGH: u16 = 1;
 
-/// The `PMAI` file header, which is 28 bytes of which 12 carry anything.
+/// The `PMAI` file header, 28 bytes of which the format analysis explains 12.
+///
+/// The four words after the file length were written zero here on the strength
+/// of a corpus that carried zeros. A rekordbox 7 export of a track this tool
+/// also analysed carries the values below instead, the same four in its `DAT`,
+/// its `EXT` and its `2EX`, so they are constants of the writer rather than
+/// anything about the track. Rule 15 of `AGENTS.md` is the rule: a field nobody
+/// has explained carries what a real export carries, and where a real export
+/// and an older reading disagree, the export wins.
 #[derive(DekuWrite)]
 #[deku(endian = "big", magic = b"PMAI")]
 struct FileHeader {
     header_size: u32,
-    /// Sixteen bytes follow that no export examined has ever filled.
-    #[deku(pad_bytes_after = "16")]
     total_size: u32,
+    unknown: [u32; 4],
 }
 
 /// A section header: kind, header length, total length.
@@ -452,6 +459,7 @@ fn file(sections: Vec<u8>) -> Vec<u8> {
     let mut out = bytes(&FileHeader {
         header_size: HEADER_SIZE,
         total_size: HEADER_SIZE + sections.len() as u32,
+        unknown: [1, 0x0001_0000, 0x0001_0000, 0],
     });
     out.extend_from_slice(&sections);
     out
