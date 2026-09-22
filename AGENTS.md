@@ -316,13 +316,20 @@ edit to `Cargo.toml`.
     the player is reading the empty file it wrote rather than looking again. Any test of a
     change needs a file name the player has never seen; renaming is what makes it look.
 
-    The directory is derived and deterministic: it survived reformatting the stick, and the
-    same name gives the same directory while one changed character moves it. It is not
-    computable from anything the export carries. A 25-bit number split as `P%03X/%08X`, the
-    high seven bits and the low eighteen, matched no hash of the path, the name, the size or
-    any pairing of them across 34 samples and 26 640 combinations of function, encoding and
-    truncation. Until it is cracked, the only way to put a file where this player will look is
-    to let it write its stub first and take the path out of that.
+    The directory is a hash of the device path, and `analysis_directory` computes it. Over the
+    UTF-16 code units of `Track::device_path`, `h = h * 23497 + c` then `h = h * 37813 + c`
+    with the same unit added twice, wrapping at 32 bits, then `h % 200003`. That index is the
+    `%08X`, and the `P%03X` above it is seven bits gathered out of it, 0, 2, 6, 7, 9, 13 and
+    16 in that order, which is what spreads consecutive tracks over directories. The constants
+    are Pioneer's, read out of `analyzer::CreateAnlzFileFolderPath` in rekordbox 7, and no
+    ordinary hash reproduces them: 26 640 combinations of function, encoding and truncation
+    were tried against 34 known directories and none matched. It reproduces all 31 directories
+    of a rekordbox export and the three an RX3 picked for itself, which is what says the
+    player runs the same function rather than reading the field.
+
+    `the_analysis_directory_is_the_one_rekordbox_hashes` pins six of those pairs. Changing
+    what goes into the hash, or where a track's audio lands, moves every analysis file on the
+    stick, so `Track::device_path` and this function have to be read together.
 
 ## 3. What a change to the algorithm has to show
 

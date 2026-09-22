@@ -237,15 +237,27 @@ When the player cannot find a track's analysis where it expects it, it writes it
 file. This is why a stick keeps testing as broken after a fix, and why any test needs a file
 name the player has never seen.
 
-The directory is `P%03X/%08X`, a 25-bit number split into its high seven bits and its low
-eighteen. It is derived rather than remembered, since it survives reformatting the stick and
-the same name always gives the same directory. Nothing in the export produces it: across 34
-known pairs, no hash of the file path, the file name, the file size or any combination
-reproduced it over 26 640 combinations of hash function, string encoding and truncation. It
-is most likely rekordbox's own library id for the track, which an exporter does not have.
+The directory is a hash of the device path, and this exporter computes the same one:
 
-Until that is solved, a stick written by this exporter browses and plays on an XDJ-RX3 but
-shows no beat grid, no cues and no waveform.
+```
+h = 0
+for each UTF-16 code unit c of /Contents/126_05A_Artist-Title.flac:
+    h = h * 23497 + c        wrapping at 32 bits
+    h = h * 37813 + c
+index  = h % 200003
+bucket = bits 0, 2, 6, 7, 9, 13 and 16 of index, packed in that order
+        /PIONEER/USBANLZ/P{bucket:03X}/{index:08X}/ANLZ0000.DAT
+```
+
+The constants are Pioneer's, read out of `analyzer::CreateAnlzFileFolderPath` in rekordbox 7.
+No ordinary hash produces them: 26 640 combinations of function, encoding and truncation were
+tried against 34 known directories and none matched. This one reproduces every directory of
+two rekordbox exports and the three an XDJ-RX3 chose for itself, which is what says the player
+runs the same function rather than reading the field.
+
+Two consequences. The analysis directory follows the audio path, so renaming a track moves its
+analysis; `Track::device_path` decides both. And `analyze_path` still gets written, with the
+same value, because every other reader of these exports does use it.
 
 ## What is not written
 

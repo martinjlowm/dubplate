@@ -60,8 +60,8 @@ pub fn write_device_to(
     collection: &Collection,
     options: &Options,
 ) -> io::Result<()> {
-    for (index, track) in collection.tracks.iter().enumerate() {
-        let directory = analysis_directory(track_id(index));
+    for track in &collection.tracks {
+        let directory = analysis_directory(&track.device_path);
         let directory = directory.trim_start_matches('/');
         sink.file(&format!("{directory}/ANLZ0000.DAT"), &anlz::dat(track))?;
         sink.file(&format!("{directory}/ANLZ0000.EXT"), &anlz::ext(track))?;
@@ -139,7 +139,7 @@ pub fn build(collection: &Collection, options: &Options) -> Database {
             comment: track.comment.clone(),
             file_name: track.file_name.clone(),
             file_path: track.device_path.clone(),
-            analyze_path: format!("{}/ANLZ0000.DAT", analysis_directory(id)),
+            analyze_path: format!("{}/ANLZ0000.DAT", analysis_directory(&track.device_path)),
             date_added: options.date.clone(),
             analyze_date: options.date.clone(),
         };
@@ -176,13 +176,59 @@ fn track_id(index: usize) -> u32 {
     index as u32 + 1
 }
 
-/// Where a track's analysis files live.
+/// Where a track's analysis files live, hashed from the path of its audio.
 ///
-/// rekordbox spreads them over two levels so no directory holds thousands of
-/// entries, which FAT32 handles badly. The names are derived from the track id
-/// rather than hashed, so the same collection exports to the same paths.
-fn analysis_directory(track_id: u32) -> String {
-    format!("/{ANALYSIS_ROOT}/P{:03}/{:08X}", track_id / 1000, track_id)
+/// A player does not read `analyze_path` to find these. It hashes the track's
+/// own device path and looks in the directory that names, so a file anywhere
+/// else is a file it never opens, whatever the database says. An XDJ-RX3 given
+/// a stick numbered sequentially browsed and played every track and showed no
+/// grid, no cues and no waveform for any of them.
+///
+/// The hash is rekordbox's, read out of `analyzer::CreateAnlzFileFolderPath` in
+/// rekordbox 7: over the UTF-16 code units of the path, two multiply-adds per
+/// unit with the same unit added twice, then a modulo that bounds it under
+/// 200003. It reproduces all 31 directories of a rekordbox export and the three
+/// an RX3 chose for itself.
+fn analysis_directory(device_path: &str) -> String {
+    let index = analysis_index(device_path);
+    format!(
+        "/{ANALYSIS_ROOT}/P{:03X}/{index:08X}",
+        analysis_bucket(index)
+    )
+}
+
+/// The hash rekordbox names an analysis directory by.
+///
+/// `h = h * 23497 + c` then `h * 37813 + c` for each UTF-16 code unit `c`,
+/// wrapping at 32 bits, then `h % 200003`. The two odd constants and the odd
+/// modulus are Pioneer's; nothing here can derive them, and they are why no
+/// ordinary hash of the path reproduces the directory.
+fn analysis_index(device_path: &str) -> u32 {
+    const FIRST: u32 = 23497;
+    const SECOND: u32 = 37813;
+    const MODULUS: u32 = 200003;
+
+    let mut hash: u32 = 0;
+    for unit in device_path.encode_utf16() {
+        let unit = u32::from(unit);
+        hash = hash.wrapping_mul(FIRST).wrapping_add(unit);
+        hash = hash.wrapping_mul(SECOND).wrapping_add(unit);
+    }
+    hash % MODULUS
+}
+
+/// The directory above the index, which is seven bits gathered out of it.
+///
+/// Not a range of the index but a scatter of single bits, 0, 2, 6, 7, 9, 13 and
+/// 16, packed in that order. Spreading the tracks over directories is the point:
+/// consecutive indices land in different ones, which is what keeps a FAT32
+/// directory small.
+fn analysis_bucket(index: u32) -> u32 {
+    const BITS: [u32; 7] = [0, 2, 6, 7, 9, 13, 16];
+    BITS.iter()
+        .enumerate()
+        .map(|(position, bit)| ((index >> bit) & 1) << position)
+        .sum()
 }
 
 /// The default playlist a device gets when the caller names none.
@@ -195,8 +241,8 @@ pub fn all_tracks_playlist(collection: &Collection) -> collection::Playlist {
 
 /// The path this exporter will write a track's analysis file to, relative to
 /// the device root. Exposed so a caller can check what it is about to write.
-pub fn analysis_path(index: usize) -> String {
-    format!("{}/ANLZ0000.DAT", analysis_directory(track_id(index)))
+pub fn analysis_path(device_path: &str) -> String {
+    format!("{}/ANLZ0000.DAT", analysis_directory(device_path))
 }
 
 /// Trait-free helper for callers that hold tracks rather than a collection.

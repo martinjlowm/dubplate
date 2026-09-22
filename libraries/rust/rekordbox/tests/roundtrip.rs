@@ -165,7 +165,7 @@ fn the_reference_parser_reads_back_every_track() {
     field(first, "bitrate: 1411");
     field(first, "sample_depth: 16");
     field(first, "file_type: Flac");
-    field(first, "/PIONEER/USBANLZ/P000/00000001/ANLZ0000.DAT");
+    field(first, "/PIONEER/USBANLZ/P028/000271B8/ANLZ0000.DAT");
     field(first, "2026-09-03");
 
     let second = tracks
@@ -532,5 +532,53 @@ mod against_a_real_export {
                 "page type {page_type} holds {rows} rows and rekordbox writes {expected}"
             );
         }
+    }
+}
+
+/// The analysis directory is the one rekordbox names, hashed from the path.
+///
+/// A player does not read `analyze_path` to find a track's analysis. It hashes
+/// the device path and opens the directory that names, so these pairs are the
+/// whole contract: get them wrong and every file this crate writes is one the
+/// player never opens, which is what a stick numbered sequentially did on an
+/// XDJ-RX3.
+///
+/// The pairs are read out of two rekordbox 7 exports, and the hash out of
+/// `analyzer::CreateAnlzFileFolderPath` in rekordbox itself. The last two are
+/// directories an RX3 chose on its own for tracks rekordbox had never seen,
+/// which is what says the player runs the same function.
+#[test]
+fn the_analysis_directory_is_the_one_rekordbox_hashes() {
+    for (device_path, expected) in [
+        (
+            "/Contents/John 00 Fleming/The 10th Life/John_00_Fleming-The_Astrophysical_Nebula_(Or.wav",
+            "/PIONEER/USBANLZ/P052/0001C314/ANLZ0000.DAT",
+        ),
+        (
+            "/Contents/UnknownArtist/UnknownAlbum/Argy_Kay,_Orkidea-Cossy_Forever_(Original_Mi.wav",
+            "/PIONEER/USBANLZ/P047/0001D575/ANLZ0000.DAT",
+        ),
+        (
+            "/Contents/UnknownArtist/UnknownAlbum/120_2A_Airwave-When_Things_Go_Wrong_(Mir_Oma.wav",
+            "/PIONEER/USBANLZ/P00B/000009BF/ANLZ0000.DAT",
+        ),
+        (
+            "/Contents/UnknownArtist/UnknownAlbum/123_6A_Trilucid-Athena_(Extended_Mix).wav",
+            "/PIONEER/USBANLZ/P07E/00013AC6/ANLZ0000.DAT",
+        ),
+        (
+            "/Contents/125_06A_John_00_Fleming-The_Astrophysical_Nebula_(Original_Mix).wav",
+            "/PIONEER/USBANLZ/P015/0002CA79/ANLZ0000.DAT",
+        ),
+        (
+            "/Contents/152_07B_Grimes,_Anyma_(ofc)-Welcome_To_The_Opera_(Kobosil_44_Symbiont_Mix_-_Extended_Mix).wav",
+            "/PIONEER/USBANLZ/P017/0000867D/ANLZ0000.DAT",
+        ),
+    ] {
+        assert_eq!(
+            rekordbox::analysis_path(device_path),
+            expected,
+            "analysis directory for {device_path}"
+        );
     }
 }
