@@ -297,6 +297,32 @@ edit to `Cargo.toml`.
     carries 0x0cdcb1f5 and that is not the track's length, beat count, tempo or sample count,
     so it is written zero rather than copied. Rule 15 covers constants, and a number that
     looks track-specific is not one.
+30. **An XDJ-RX3 decides for itself which directory a track's analysis lives in, and never
+    reads `analyze_path`.** It is the field every tool in this ecosystem treats as the answer,
+    and the format analysis says so outright: "the paths to these files are found inside the
+    corresponding track record." That is true of where rekordbox *put* them. It is not how this
+    player *looks* for them.
+
+    Measured on one stick, one player, with a positive signal rather than an absence: our two
+    tracks were given the analysis of the other one at the directory `analyze_path` names, and
+    their own analysis at the directory the player had picked. Both drew their own waveform,
+    and the two tracks differ by 203 beats, so a wrong read would have been unmistakable. The
+    same two tracks had already drawn nothing through eleven rounds of changes to the files,
+    the row and the directory while the analysis sat only where `analyze_path` pointed.
+
+    What the player does with a track whose analysis it cannot find is write its own
+    `ANLZ0000.DAT` there, carrying `PPTH` and a `PQTZ` of zero beats, and read that
+    afterwards. So a stick tests as broken, and keeps testing as broken after the fix, because
+    the player is reading the empty file it wrote rather than looking again. Any test of a
+    change needs a file name the player has never seen; renaming is what makes it look.
+
+    The directory is derived and deterministic: it survived reformatting the stick, and the
+    same name gives the same directory while one changed character moves it. It is not
+    computable from anything the export carries. A 25-bit number split as `P%03X/%08X`, the
+    high seven bits and the low eighteen, matched no hash of the path, the name, the size or
+    any pairing of them across 34 samples and 26 640 combinations of function, encoding and
+    truncation. Until it is cracked, the only way to put a file where this player will look is
+    to let it write its stub first and take the path out of that.
 
 ## 3. What a change to the algorithm has to show
 

@@ -220,6 +220,33 @@ The schema itself is Denon's, transcribed from libdjinterop, which is the open
 record of each Engine schema version. A player checks what it finds, so the
 statements are the format rather than a design.
 
+## Where a player looks for the analysis
+
+`export.pdb` gives every track an `analyze_path`, and this exporter fills it with the
+directory it wrote the files into: `/PIONEER/USBANLZ/P000/00000001` for the first track,
+counting up. Every tool that reads these exports takes that field as the answer.
+
+An XDJ-RX3 does not. It works out a directory of its own and reads that, so it has never
+opened a file this exporter wrote. The test that shows it: give a track the *other* track's
+analysis at the directory `analyze_path` names, and its own analysis at the directory the
+player picked. Both tracks draw their own waveform. The two differ by 203 beats, so reading
+the wrong one would be obvious.
+
+When the player cannot find a track's analysis where it expects it, it writes its own
+`ANLZ0000.DAT` there: the path, and a beat grid of zero beats. From then on it reads that
+file. This is why a stick keeps testing as broken after a fix, and why any test needs a file
+name the player has never seen.
+
+The directory is `P%03X/%08X`, a 25-bit number split into its high seven bits and its low
+eighteen. It is derived rather than remembered, since it survives reformatting the stick and
+the same name always gives the same directory. Nothing in the export produces it: across 34
+known pairs, no hash of the file path, the file name, the file size or any combination
+reproduced it over 26 640 combinations of hash function, string encoding and truncation. It
+is most likely rekordbox's own library id for the track, which an exporter does not have.
+
+Until that is solved, a stick written by this exporter browses and plays on an XDJ-RX3 but
+shows no beat grid, no cues and no waveform.
+
 ## What is not written
 
 - **Album art.** The `Artwork` table exists and is empty; the artwork id on every
