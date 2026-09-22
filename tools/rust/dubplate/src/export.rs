@@ -81,7 +81,10 @@ pub fn run(args: ExportArgs) -> Result<()> {
         rekordbox::write_device(
             &args.out,
             &collection,
-            &rekordbox::Options { date: date.clone() },
+            &rekordbox::Options {
+                date: date.clone(),
+                settings: rekordbox::settings::Settings::default(),
+            },
         )
         .context("writing the rekordbox database")?;
     }

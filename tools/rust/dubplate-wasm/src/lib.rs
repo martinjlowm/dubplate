@@ -360,6 +360,7 @@ impl Device {
                 &collection,
                 &rekordbox::Options {
                     date: date.to_string(),
+                    settings: rekordbox::settings::Settings::default(),
                 },
             )
             .map_err(|e| JsError::new(&format!("writing the rekordbox database: {e}")))?;

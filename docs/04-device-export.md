@@ -9,6 +9,8 @@ why the writer exists at all, see the README explanation.
 ```
 /Contents/126_05A_Artist-Title.flac          the audio, named by what was measured in it
 /PIONEER/rekordbox/export.pdb                the database a Pioneer player browses
+/PIONEER/MYSETTING.DAT                       player settings: quantise, hot cues, auto cue
+/PIONEER/MYSETTING2.DAT                      display settings: waveform, phrase markings
 /PIONEER/USBANLZ/P000/00000001/ANLZ0000.DAT  beat grid, cues, monochrome waveforms
 /PIONEER/USBANLZ/P000/00000001/ANLZ0000.EXT  the colour waveforms, the extended cues and grid, the phrases
 /PIONEER/USBANLZ/P000/00000001/ANLZ0000.2EX  the three-band waveforms an XDJ-RX3 draws
@@ -18,10 +20,11 @@ why the writer exists at all, see the README explanation.
 Both databases go on the same device. They read different directories, neither
 player looks at the other's, and the audio in `/Contents` is shared.
 
-Every track's analysis directory is derived from its row id, not hashed, so the
-same collection exports to the same paths. The database stores the path of both
-the audio and the analysis file, and `Track::device_path` in the exporter is the
-single source of both: nothing else in the pipeline decides where a file lands.
+Every track's analysis directory is hashed from the path of its audio, which is
+what a player does to find it. The database stores the path of both the audio
+and the analysis file, and `Track::device_path` in the exporter is the single
+source of both: nothing else in the pipeline decides where a file lands, and
+renaming a track moves its analysis with it.
 
 `export` writes the databases only. The audio is placed by whoever assembles the
 device, which is the image builder in the Nix pipeline and `--audio-mode` when
@@ -258,6 +261,44 @@ runs the same function rather than reading the field.
 Two consequences. The analysis directory follows the audio path, so renaming a track moves its
 analysis; `Track::device_path` decides both. And `analyze_path` still gets written, with the
 same value, because every other reader of these exports does use it.
+
+## Player settings
+
+Four files in `/PIONEER/` hold what a deck does rather than anything about a track. Without
+them a stick inherits whatever the last DJ left on the player, which is how a cue placed on a
+bar line gets played back unquantised.
+
+All four are three fixed-width strings, a length, the settings, then a CRC-16/XMODEM checksum.
+The checksum covers the data block alone, except in `DJMMYSETTING.DAT` where it covers the
+whole file. `libraries/rust/rekordbox/tests/settings.rs` reproduces a rekordbox 7 export's four
+files byte for byte, which is what checks the envelope, the field order, the constants and both
+checksum forms together.
+
+The defaults are chosen so a player uses what was measured:
+
+| Setting | Default | Why |
+|---|---|---|
+| `hotcue_autoload` | `rekordbox` | load the cue pads on track load, with their own colours |
+| `hotcue_colour` | on | otherwise the pads are all one colour |
+| `quantize`, `quantize_beat_value` | on, 1 beat | the cues sit on bar lines already |
+| `auto_cue`, `auto_cue_level` | on, memory | cue to the first memory cue, which is beat one, rather than hunting for silence |
+| `waveform_divisions` | phrase | draws the `PSSI` phrases along the waveform |
+| `sync` | **off** | a measured grid is a claim about the track, not licence to move it |
+| `tempo_range` | 16% | |
+| `time_mode`, `jog_mode` | remain, vinyl | |
+
+Everything else a DJ might want is on `settings::Settings`: language, brightnesses, play mode,
+master tempo, phase meter, beat jump, jog display, vinyl speed adjust.
+
+Two things people expect to find here and will not. **There is no waveform colour palette** —
+which waveform a deck draws is decided by which sections the analysis carries, and it takes the
+richest it finds, so writing `PWV7`/`PWV6` is what gets the three-band view. The only related
+setting is `waveform`, full waveform against phase meter. And **cue colours are per cue**, held
+in `PCO2` as an index into the colour table, not chosen here.
+
+`DEVSETTING.DAT` and `DJMMYSETTING.DAT` carry nothing this exporter decides. They are written
+with the values a real export carries, because a file a player reads is worse absent than
+copied.
 
 ## What is not written
 

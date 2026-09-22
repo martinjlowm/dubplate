@@ -92,6 +92,7 @@ fn collection() -> Collection {
 fn write_database(collection: &Collection) -> Vec<u8> {
     let options = rekordbox::Options {
         date: "2026-09-03".to_string(),
+        settings: rekordbox::settings::Settings::default(),
     };
     let mut bytes = Vec::new();
     rekordbox::build(collection, &options)

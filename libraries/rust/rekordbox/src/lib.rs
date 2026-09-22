@@ -18,6 +18,7 @@
 pub mod anlz;
 pub mod pdb;
 pub mod rows;
+pub mod settings;
 pub mod string;
 
 use collection::{Collection, Sink, Track};
@@ -32,6 +33,13 @@ const ANALYSIS_ROOT: &str = "PIONEER/USBANLZ";
 
 /// Options that would otherwise be guessed.
 pub struct Options {
+    /// The player preferences written into `/PIONEER/*.DAT`.
+    ///
+    /// A stick without them leaves every deck on whatever the last DJ set, and
+    /// the cues and phrases this tool writes are only used when quantise and
+    /// hot cue autoload are on.
+    pub settings: settings::Settings,
+
     /// The date written into every track's `date_added` and `analyze_date`, as
     /// `YYYY-MM-DD`.
     ///
@@ -70,7 +78,18 @@ pub fn write_device_to(
 
     let mut database_bytes = Vec::new();
     build(collection, options).write(&mut database_bytes)?;
-    sink.file(DATABASE_PATH, &database_bytes)
+    sink.file(DATABASE_PATH, &database_bytes)?;
+
+    sink.file(
+        "PIONEER/MYSETTING.DAT",
+        &settings::my_setting(&options.settings),
+    )?;
+    sink.file(
+        "PIONEER/MYSETTING2.DAT",
+        &settings::my_setting_2(&options.settings),
+    )?;
+    sink.file("PIONEER/DEVSETTING.DAT", &settings::dev_setting())?;
+    sink.file("PIONEER/DJMMYSETTING.DAT", &settings::djm_my_setting())
 }
 
 /// Build the database in memory, which is what the tests read back.
