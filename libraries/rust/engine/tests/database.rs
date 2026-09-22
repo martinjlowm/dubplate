@@ -47,6 +47,7 @@ fn track(name: &str, bpm: f64, camelot: &str) -> Track {
         seek_table: None,
         beats,
         cues: Vec::new(),
+        sections: Vec::new(),
         preview: Waveform::from_columns(4.0, &columns),
         detail: Waveform::from_columns(150.0, &columns),
     }

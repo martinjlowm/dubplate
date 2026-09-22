@@ -202,7 +202,7 @@ found. Nothing here changes the tempo, the grid or the key.
 | `structure.cues[]` | The cues placed, hot and memory. |
 | `.kind` | `hot` or `memory`. |
 | `.number` | 1 to 8. Hot cue 1 is pad A and the pad is fixed, so a track with no build has no cue 3. Memory cues are numbered in the order they were placed. |
-| `.name`, `.colour` | The role and the colour rekordbox gives that pad. The colour is not written to the device: a cue colour lives in the `PCO2` section this tool does not yet produce. |
+| `.name`, `.colour` | The role and the colour rekordbox gives that pad. The name is written to the device, in the `PCO2` section a Nexus 2 reads; the colour is not, and every exported cue carries the player's default. |
 | `.time_seconds`, `.bar` | Where the cue sits. Always a bar line. |
 | `.from_section` | Index into `sections[]`, or null for the first-beat and loop pads, which are placed by position rather than by a section. |
 | `structure.missing_pads[]` | Pad letters no section could fill. Left empty rather than filled with the nearest thing. |

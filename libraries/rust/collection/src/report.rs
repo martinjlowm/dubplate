@@ -5,7 +5,7 @@
 //! contract between the two halves, and this module is where a change to it
 //! fails loudly instead of silently exporting a default.
 
-use crate::{Beat, Cue, CueKind, Format, Track};
+use crate::{Beat, Cue, CueKind, Format, Section, SectionLabel, Track};
 use serde::Deserialize;
 use std::error::Error;
 use std::fmt;
@@ -24,12 +24,22 @@ struct Report {
     waveforms: Waveforms,
 }
 
-/// The cues the structure stage placed. Defaulted rather than required, so a
-/// report written before that stage existed still exports.
+/// The stretches the structure stage found and the cues it placed. Defaulted
+/// rather than required, so a report written before that stage existed still
+/// exports.
 #[derive(Default, Deserialize)]
 struct Structure {
     #[serde(default)]
+    sections: Vec<ReportSection>,
+    #[serde(default)]
     cues: Vec<ReportCue>,
+}
+
+#[derive(Deserialize)]
+struct ReportSection {
+    label: String,
+    start_seconds: f64,
+    end_seconds: f64,
 }
 
 #[derive(Deserialize)]
@@ -254,6 +264,22 @@ pub fn parse(
             .collect()
     };
 
+    // A label this module does not know is a stretch it drops rather than a
+    // stretch it guesses at: the report is the contract, and a sixth name
+    // appearing in it is a change to that contract, not a `Steady`.
+    let sections: Vec<Section> = parsed
+        .structure
+        .sections
+        .iter()
+        .filter_map(|section| {
+            Some(Section {
+                label: SectionLabel::parse(&section.label)?,
+                start_seconds: section.start_seconds + shift_seconds,
+                end_seconds: section.end_seconds + shift_seconds,
+            })
+        })
+        .collect();
+
     Ok(Track {
         source: PathBuf::from(&file_name),
         device_path: format!("{}/{}", device_directory.trim_end_matches('/'), file_name),
@@ -278,6 +304,7 @@ pub fn parse(
         seek_table: None,
         beats,
         cues,
+        sections,
         preview: parsed.waveforms.preview,
         detail: parsed.waveforms.detail,
     })

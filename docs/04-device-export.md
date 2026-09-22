@@ -10,7 +10,8 @@ why the writer exists at all, see the README explanation.
 /Contents/126_05A_Artist-Title.flac          the audio, named by what was measured in it
 /PIONEER/rekordbox/export.pdb                the database a Pioneer player browses
 /PIONEER/USBANLZ/P000/00000001/ANLZ0000.DAT  beat grid, cues, monochrome waveforms
-/PIONEER/USBANLZ/P000/00000001/ANLZ0000.EXT  the scrolling and colour waveforms
+/PIONEER/USBANLZ/P000/00000001/ANLZ0000.EXT  the colour waveforms, the extended cues and grid, the phrases
+/PIONEER/USBANLZ/P000/00000001/ANLZ0000.2EX  the three-band waveforms an XDJ-RX3 draws
 /Engine Library/Database2/m.db               the database a Denon player browses
 ```
 
@@ -116,6 +117,59 @@ cosmetic: a library whose every artist is its track number has nothing a player 
 which pushes a DJ into the Folder menu, and loading a track from there is the one case where a
 CDJ ignores the exported analysis and reads the file itself.
 
+### The phrases
+
+`PSSI` is where rekordbox puts its phrase analysis, and it is what a player
+lights a track by and what other tooling reads instead of running an analysis of
+its own. This writes the stretches `report.json` already carries, one phrase
+each, in the high mood, whose vocabulary the six labels fit:
+
+| Label | Phrase kind |
+|---|---|
+| `intro` | 1, Intro |
+| `build` | 2, Up |
+| `steady` | 2, Up |
+| `breakdown` | 3, Down |
+| `drop` | 5, Chorus |
+| `outro` | 6, Outro |
+
+`steady` has no word of its own in this vocabulary. It goes down as Up rather
+than leaving a hole in the middle of the track, which is the one place the
+mapping loses something.
+
+These are coarser than rekordbox's. On the same track rekordbox wrote 31
+phrases where the structure stage found four stretches: it cuts at every
+sixteen or thirty-two bars, and this cuts where the track changed. Both are
+claims, and these are the ones with `low_band_db`, `broadband_db`, `rise_db` and
+a confidence beside them in `report.json`.
+
+Every export since rekordbox 6 masks the section, and so does this: each byte
+from the mood onwards is XORed with a nineteen-byte pattern whose every byte has
+the phrase count added to it. A player that reads the mask reads these.
+
+The `k1`, `k2` and `k3` flags that subdivide a high-mood phrase into "Up 1" and
+"Up 2", and the `beat2` to `beat4` marks for a change inside a phrase, are
+written zero. They are zero on all 31 phrases of the export measured against
+too, and nothing here measures what they would say.
+
+### The extended beat grid
+
+`PQT2` is the same beats as `PQTZ` to the microsecond: a header naming the first
+and last beat and the beat count, then one big-endian word per beat holding the
+microseconds past the whole millisecond `PQTZ` rounds down to. On the export
+measured against, `PQTZ` time plus that word over 1000 fits a straight line
+through all 923 beats to within 0.046 ms, where the whole milliseconds alone sit
+0.527 ms off it.
+
+`PQTZ` rounds a beat down rather than to the nearest millisecond, which is what
+lets the remainder be positive. That is what the export does, and changing it
+here moved no beat by more than a millisecond.
+
+One word of the header is unexplained. The export carries 0x0cdcb1f5 there,
+which is not that track's length, beat count, tempo or sample count, so it reads
+as track-specific rather than as a constant and is written zero rather than
+copied.
+
 ## Where each database field comes from
 
 | Database field | Source |
@@ -170,19 +224,17 @@ statements are the format rather than a design.
 
 - **Album art.** The `Artwork` table exists and is empty; the artwork id on every
   track is zero.
-- **Cue colours and names.** The cues themselves are written, hot and memory,
-  but the colour and the label a player shows live in the `PCO2` section, which
-  this tool does not produce. The pads land in the right places and read as
-  numbers rather than as "Drop".
+- **Cue colours.** `PCO2` carries a colour per cue and this writes none, so every
+  cue goes out in the player's default. The name does go across: a Nexus 2 reads
+  "Drop" off the pad rather than a number.
 - **Index pages.** The database carries data pages only. Browsing by title or by
   artist is built from them by the player.
-- **Song structure, phrase analysis, `PSSI`.** Not written. The sections this
-  tool measures are its own, in `report.json`; rekordbox's phrase model is a
-  different thing in a section nothing here writes.
-- **`PCO2` and `PQT2`.** The extended cue list and the extended beat grid, both
-  of which a real `EXT` carries. The cues and the grid go out in `PCOB` and
-  `PQTZ` instead. `PCO2` is deliberately not written empty: that would tell a
-  Nexus 2 player the track has no cues at all.
+- **Vocal detection, `PVDI`.** Not written, and not measurable here: it needs the
+  vocal separated from the mix, which section 4 of `AGENTS.md` puts out of scope.
+  Tooling that places a cue on the first vocal has nothing to read.
+- **`PCP2`'s last twenty bytes.** Five words rekordcrate reads as unknown and the
+  format analysis does not reach. They go out zero. Every populated extended cue
+  list read here has been one this tool wrote.
 - **Engine's scrolling waveform.** See above.
 - **Engine crates and smartlists.** One playlist per device, and no crates.
 
@@ -204,8 +256,16 @@ The parser is pinned to an upstream commit rather than the published 0.3.0,
 which reads a cue point's type as 0 where the current analysis and rekordbox use
 1.
 
-The colour waveform sections are checked the same way: the red, green, blue and
-height of each column come back from the parser exactly as written.
+The colour waveform sections are the one place the parser is not the oracle.
+rekordcrate reads a `PWV5` column's two bytes from the low end up, and this
+exporter wrote what it read until an XDJ-RX3 drew no scrolling waveform from a
+stick. In the `PWV5` rekordbox wrote for a track this tool also analysed, the
+height sits in bits six to two of the second byte, where it matches that file's
+`PWV3` height column for column at 0.97 across all 66 395 columns; read one bit
+lower, where rekordcrate puts it, it matches at 0.51. So the column is packed
+from the high bit of the first byte down, low band first, and the test asserts
+those bit positions against the layout measured off the export rather than
+against the parser.
 
 The Engine database has no reference parser to check it against, so the check
 there is the database itself. Its schema carries constraints, foreign keys and
@@ -213,10 +273,15 @@ triggers, and every row this exporter writes has to satisfy them; the tests then
 read the values back through `PerformanceData`, which is the view a player reads
 the analysis through, and walk the playlist as a player walks it.
 
-What none of this establishes is that a player accepts the result. No CDJ, XDJ
-or Denon deck has read one of these sticks. The fields whose purpose nobody has
-established are written with the constants that appear in real exports, and they
-are marked as such in `rows.rs`, `anlz.rs` and `blob.rs`.
+What none of this establishes is that a player draws the result. An XDJ-RX3
+browses these sticks and plays from them; what it did not draw was the colour
+waveform, and the parser said nothing about that because the parser and the
+exporter agreed with each other and not with rekordbox. Where a layout is in
+doubt now, the check is a rekordbox export of a track this tool also analysed,
+put side by side column for column. No Denon deck has read one of these sticks.
+The fields whose purpose nobody has established are written with the constants
+that appear in real exports, and they are marked as such in `rows.rs`, `anlz.rs`
+and `blob.rs`.
 
 ## Images
 

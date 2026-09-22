@@ -68,6 +68,7 @@ fn track(name: &str, bpm: f64, key: &str, notes: &str) -> Track_ {
             number: 1,
             comment: String::new(),
         }],
+        sections: Vec::new(),
         preview: flat_waveform(1.0, 1200),
         detail: flat_waveform(150.0, 6000),
     }

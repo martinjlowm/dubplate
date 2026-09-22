@@ -21,12 +21,20 @@
 //!
 //! Format reference: <https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/anlz.html>
 
-use collection::{CueKind, Track};
+use collection::{Beat, CueKind, SectionLabel, Track};
 use deku::prelude::*;
 use waveform::{COLOUR_PREVIEW_COLUMNS, Column, PREVIEW_COLUMNS};
 
 /// Columns in the tiny preview a player draws on the track list.
 const TINY_PREVIEW_COLUMNS: usize = 100;
+
+/// Bytes in one `PSSI` phrase, which the section declares and every export
+/// carries.
+const PHRASE_BYTES: u32 = 24;
+
+/// The mood whose phrases are intro, up, down, chorus and outro, which is the
+/// one the export measured against uses and the one the six labels here fit.
+const MOOD_HIGH: u16 = 1;
 
 /// The `PMAI` file header, which is 28 bytes of which 12 carry anything.
 #[derive(DekuWrite)]
@@ -83,6 +91,37 @@ struct BeatEntry {
     time_ms: u32,
 }
 
+/// `PQT2`: the fields before the per-beat microseconds.
+///
+/// The two beats are the first and the last of the grid, repeated from `PQTZ`,
+/// which is how the export measured against carries them: beat one reads
+/// (4, 12500, 10) there and (4, 12500, 10) here, and the last reads
+/// (2, 12500, 442569) in both.
+#[derive(DekuWrite)]
+#[deku(endian = "big")]
+struct ExtendedBeatGridHeader {
+    zero: u32,
+    one: u8,
+    zero_byte: u8,
+    /// Two, which is how many beat entries follow.
+    beats_in_header: u16,
+    zero_word: u32,
+    first_number_in_bar: u16,
+    first_centi_bpm: u16,
+    first_time_ms: u32,
+    last_number_in_bar: u16,
+    last_centi_bpm: u16,
+    last_time_ms: u32,
+    len_beats: u32,
+    /// The one field here nothing explains. The export read for this section
+    /// carries 0x0cdcb1f5, which is neither a time, a beat count, a tempo nor a
+    /// sample count of that track, so it reads as track-specific rather than as
+    /// a constant and copying it would put another track's number in every
+    /// file. Written zero until a second export says what it is.
+    unknown: u32,
+    zero_tail: [u32; 2],
+}
+
 /// `PCOB`: the fields before a cue list.
 #[derive(DekuWrite)]
 #[deku(endian = "big")]
@@ -95,6 +134,124 @@ struct CueListHeader {
     /// ones in each of the 924 cue lists measured against here, lists holding
     /// cues included, so it counts nothing.
     all_ones: u32,
+}
+
+/// `PCO2`: the fields before an extended cue list.
+///
+/// Four bytes shorter than [`CueListHeader`]: no word counting the memory cues,
+/// and the cue count moves ahead of the padding. Both empty lists in the export
+/// measured against read `PCO2 00000014 00000014 0000000t 0000`, which is this
+/// with no entries after it.
+#[derive(DekuWrite)]
+#[deku(endian = "big")]
+struct ExtendedCueListHeader {
+    /// 0 for the memory cues, 1 for the hot cues, as in `PCOB`.
+    list_type: u32,
+    len_cues: u16,
+    zero: u16,
+}
+
+/// `PCP2`: one extended cue, up to the comment.
+///
+/// A Nexus 2 reads these in preference to `PCPT`, and what it gets here that it
+/// cannot get there is the comment and the colour. The entry runs on past the
+/// comment, which is why this stops at its length: see [`extended_cue_list`].
+#[derive(DekuWrite)]
+#[deku(endian = "big")]
+struct ExtendedCueEntry {
+    /// Hot cue slot, counted from 1, or 0 for a memory cue.
+    hot_cue: u32,
+    /// 1 for a point, 2 for a loop.
+    kind: u8,
+    zero: u8,
+    /// Constant in every entry the format analysis records.
+    constant_1000: u16,
+    time_ms: u32,
+    /// Where a loop ends. Zero when there is no loop, unlike `PCPT`, which
+    /// writes all ones there.
+    loop_end_ms: u32,
+    /// Row of the colour table, which is the colour a memory cue is drawn in.
+    colour_id: u8,
+    /// The format analysis records this byte as 1 and the six after it as 0.
+    one: u8,
+    zero_pair: u16,
+    zero_word: u32,
+    /// The size of a quantised loop. Nothing here writes one.
+    loop_numerator: u16,
+    loop_denominator: u16,
+}
+
+/// `PCP2`: the fields after the comment.
+///
+/// The colour a hot cue lights its button with, then five words the format
+/// analysis does not reach and rekordcrate reads as unknown. No populated
+/// `PCO2` has been read here, so they are written zero and named.
+#[derive(DekuWrite)]
+#[deku(endian = "big")]
+struct ExtendedCueColour {
+    colour_index: u8,
+    red: u8,
+    green: u8,
+    blue: u8,
+    unknown: [u32; 5],
+}
+
+/// `PSSI`: the fields before the phrases, of which everything from `mood` on is
+/// masked.
+#[derive(DekuWrite)]
+#[deku(endian = "big")]
+struct SongStructureHeader {
+    /// Twenty-four, the size of one phrase.
+    len_entry_bytes: u32,
+    len_entries: u16,
+}
+
+/// `PSSI`: the masked fields between the phrase count and the phrases.
+#[derive(DekuWrite)]
+#[deku(endian = "big")]
+struct SongStructureBody {
+    /// 1 high, 2 mid, 3 low. Which one decides what the phrase kinds mean.
+    mood: u16,
+    zero: u32,
+    zero_word: u16,
+    /// The beat the last phrase ends on.
+    end_beat: u16,
+    zero_pair: u16,
+    /// The bank a player lights the track in. 0 is the default.
+    bank: u8,
+    zero_byte: u8,
+}
+
+/// `PSSI`: one phrase, 24 bytes.
+///
+/// The variant flags `k1`, `k2` and `k3` subdivide a high-mood phrase into
+/// "Up 1", "Up 2" and the rest, and `beat2` to `beat4` mark where a phrase
+/// changes inside itself. All of them are zero on all 31 phrases of the export
+/// measured against, and this writes none of them: a phrase here is a stretch
+/// the structure stage named, with nothing inside it that was measured.
+#[derive(DekuWrite)]
+#[deku(endian = "big")]
+struct PhraseEntry {
+    /// Counted from 1.
+    index: u16,
+    beat: u16,
+    /// What the phrase is, in the vocabulary the mood picks.
+    kind: u16,
+    zero: u8,
+    k1: u8,
+    zero_2: u8,
+    k2: u8,
+    zero_3: u8,
+    b: u8,
+    beat2: u16,
+    beat3: u16,
+    beat4: u16,
+    zero_4: u8,
+    k3: u8,
+    zero_5: u8,
+    /// 1 when the phrase ends in beats belonging to no phrase.
+    fill: u8,
+    beat_fill: u16,
 }
 
 /// `PCPT`: one cue, fixed at 0x38 bytes of which this is the body.
@@ -183,18 +340,22 @@ struct MonochromeColumn {
     shade: u8,
 }
 
-/// The six bytes a colour preview column is, one per band plus the pair the
-/// format analysis calls the whiteness.
+/// The six bytes a colour preview column is: a height, its complement, the
+/// loudest band, and then the three band levels.
 ///
-/// There is no height field: the player draws the column from the energies
-/// themselves, so each band arrives scaled by the column's height as well as by
-/// its share of the column.
+/// Measured against the `PWV4` a rekordbox export wrote for a track this tool
+/// also analysed, 1200 columns of it against the same track's audio. The last
+/// three bytes track the low, mid and high band energy, at 0.97, 0.83 and 0.84.
+/// `height` tracks the loudest detail column under it at 0.97 and never passes
+/// 127. `height` and `inverse_height` sum to 255 give or take seven, which is
+/// what says the second is the first subtracted from full scale rather than a
+/// measurement of its own, and `loudest_band` sits within five of the largest
+/// of the three levels.
 #[derive(DekuWrite)]
 struct ColourPreviewColumn {
-    whiteness: u8,
-    whiteness_again: u8,
-    /// Energy below 10 kHz, which the player uses for the body of the column.
-    below_10k: u8,
+    height: u8,
+    inverse_height: u8,
+    loudest_band: u8,
     low: u8,
     mid: u8,
     high: u8,
@@ -202,24 +363,27 @@ struct ColourPreviewColumn {
 
 /// The two bytes a colour detail column is.
 ///
-/// Sixteen bits from the low end up: three each of high, mid and low band, five
-/// of height, and two the format analysis calls a sub-step, which no export
-/// examined has ever set. `low` is the field that crosses the byte boundary,
-/// bits six to eight, which is the reason this is declared rather than shifted:
-/// `bit_order = "lsb"` places it, and the default would fill from the high bit
-/// down and write a file a player draws wrong rather than one it rejects.
+/// Sixteen bits from the high end of the first byte down: three each of low,
+/// mid and high band, five of height, and two the format analysis calls a
+/// sub-step, which the export measured against leaves zero on every one of its
+/// 66 395 columns.
 ///
-/// Red is the top of the spectrum and blue the bottom, which is the way every
-/// player draws it.
+/// rekordcrate reads these two bytes the other way up, and this crate wrote
+/// what rekordcrate read until an XDJ-RX3 drew no scrolling waveform from it.
+/// In the rekordbox export of the same track the height in bits six to two of
+/// the second byte matches the `PWV3` height column for column, at 0.97 over
+/// the whole track; read where rekordcrate puts it, one bit lower, it matches
+/// at 0.51 and is a different number on almost every column. The low band lands
+/// in the field rekordcrate calls red, at 0.73 against the track's own audio
+/// below 200 Hz, and the high band in the one it calls blue.
 #[derive(DekuWrite)]
-#[deku(bit_order = "lsb")]
 struct ColourDetailColumn {
     #[deku(bits = 3)]
-    high: u8,
+    low: u8,
     #[deku(bits = 3)]
     mid: u8,
     #[deku(bits = 3)]
-    low: u8,
+    high: u8,
     #[deku(bits = 5)]
     height: u8,
     #[deku(bits = 2)]
@@ -254,11 +418,9 @@ pub fn dat(track: &Track) -> Vec<u8> {
 /// The path is repeated because a player may read either file first and each
 /// one has to identify the track it belongs to.
 ///
-/// A real EXT carries four more sections this one does not: `PCO2` twice, the
-/// cue lists a Nexus 2 reads in preference to `PCOB`, `PQT2` for the extended
-/// beat grid, and `PSSI` for the phrases. The first three are cues and beats
-/// this exporter already measures in a layout nothing here has been checked
-/// against; `PSSI` is phrase detection it does not do at all.
+/// The order is the one the export measured against carries, and it puts the
+/// extended cue lists and the extended beat grid between the old cue lists and
+/// the colour waveforms, with the phrases last.
 pub fn two_ex(track: &Track) -> Vec<u8> {
     let mut sections = Vec::new();
     sections.extend(path_section(&track.device_path));
@@ -275,8 +437,12 @@ pub fn ext(track: &Track) -> Vec<u8> {
     sections.extend(waveform_detail(track));
     sections.extend(cue_list(track, CueKind::Hot));
     sections.extend(cue_list(track, CueKind::Memory));
+    sections.extend(extended_cue_list(track, CueKind::Hot));
+    sections.extend(extended_cue_list(track, CueKind::Memory));
+    sections.extend(extended_beat_grid(track));
     sections.extend(colour_waveform_detail(track));
     sections.extend(colour_waveform_preview(track));
+    sections.extend(song_structure(track));
     file(sections)
 }
 
@@ -347,14 +513,75 @@ fn beat_grid(track: &Track) -> Vec<u8> {
         constant: 0x0008_0000,
         len_beats: track.beats.len() as u32,
     });
-    for beat in &track.beats {
-        body.extend(bytes(&BeatEntry {
-            number_in_bar: u16::from(beat.number_in_bar),
-            centi_bpm: (beat.bpm * 100.0).round() as u16,
-            time_ms: (beat.time_seconds * 1000.0).round() as u32,
-        }));
+    for beat in track.beats.iter().map(beat_entry) {
+        body.extend(bytes(&beat));
     }
     section(b"PQTZ", 0x18, &body)
+}
+
+/// One beat as both grid sections store it.
+///
+/// The time is the whole millisecond the beat falls on or after, not the
+/// nearest one, because `PQT2` carries the rest of it as a positive remainder
+/// and a rounded-up millisecond would need a negative one. The export measured
+/// against floors: its first beat is 10 ms with a remainder of 884 µs against a
+/// grid whose line through all 923 beats passes 10.884 ms.
+fn beat_entry(beat: &Beat) -> BeatEntry {
+    BeatEntry {
+        number_in_bar: u16::from(beat.number_in_bar),
+        centi_bpm: (beat.bpm * 100.0).round() as u16,
+        time_ms: (beat_microseconds(beat) / 1000) as u32,
+    }
+}
+
+/// A beat's time in whole microseconds, which both grid sections divide up.
+fn beat_microseconds(beat: &Beat) -> u64 {
+    (beat.time_seconds * 1_000_000.0).round().max(0.0) as u64
+}
+
+/// `PQT2`: the beat grid a Nexus 2 reads, which is the same beats to the
+/// microsecond.
+///
+/// The body is one big-endian word per beat: the microseconds past the whole
+/// millisecond `PQTZ` stores. Measured on the export beside this one, where
+/// `time_ms + word / 1000` fits a straight line through all 923 beats to within
+/// 0.046 ms, against 0.527 ms for the whole milliseconds alone. Its words run
+/// 884, 793, 702 and on down through 68 to 977, which is the sub-millisecond
+/// drift of a 479.99832 ms beat wrapping at 1000.
+///
+/// rekordcrate does not read this section at all, so nothing but that export
+/// checks the layout.
+fn extended_beat_grid(track: &Track) -> Vec<u8> {
+    let edge = |beat: Option<&Beat>| {
+        beat.map(beat_entry).unwrap_or(BeatEntry {
+            number_in_bar: 0,
+            centi_bpm: 0,
+            time_ms: 0,
+        })
+    };
+    let first = edge(track.beats.first());
+    let last = edge(track.beats.last());
+
+    let mut body = bytes(&ExtendedBeatGridHeader {
+        zero: 0,
+        one: 1,
+        zero_byte: 0,
+        beats_in_header: 2,
+        zero_word: 0,
+        first_number_in_bar: first.number_in_bar,
+        first_centi_bpm: first.centi_bpm,
+        first_time_ms: first.time_ms,
+        last_number_in_bar: last.number_in_bar,
+        last_centi_bpm: last.centi_bpm,
+        last_time_ms: last.time_ms,
+        len_beats: track.beats.len() as u32,
+        unknown: 0,
+        zero_tail: [0; 2],
+    });
+    for beat in &track.beats {
+        body.extend_from_slice(&((beat_microseconds(beat) % 1000) as u16).to_be_bytes());
+    }
+    section(b"PQT2", 0x38, &body)
 }
 
 /// `PCOB`: one list of cues, either the memory cues or the hot cues.
@@ -393,6 +620,182 @@ fn cue_list(track: &Track, kind: CueKind) -> Vec<u8> {
     }
 
     section(b"PCOB", 0x18, &body)
+}
+
+/// `PCO2`: the same cues again, in the layout a Nexus 2 reads.
+///
+/// Both lists are written even when empty, as `PCOB` is: the export measured
+/// against carries two empty ones beside two empty `PCOB`s, and an empty
+/// extended list beside a populated `PCOB` is how a player is told this track's
+/// cues are the old kind.
+///
+/// The entry layout past the comment is the one rekordcrate reads and the
+/// format analysis does not reach. No populated `PCO2` has been read here, so
+/// it is the least checked layout this crate writes.
+fn extended_cue_list(track: &Track, kind: CueKind) -> Vec<u8> {
+    let cues: Vec<_> = track.cues.iter().filter(|cue| cue.kind == kind).collect();
+
+    let mut body = bytes(&ExtendedCueListHeader {
+        list_type: u32::from(kind == CueKind::Hot),
+        len_cues: cues.len() as u16,
+        zero: 0,
+    });
+
+    for cue in cues {
+        let mut entry = bytes(&ExtendedCueEntry {
+            hot_cue: u32::from(if kind == CueKind::Hot { cue.number } else { 0 }),
+            kind: 1,
+            zero: 0,
+            constant_1000: 1000,
+            time_ms: (cue.time_seconds * 1000.0).round().max(0.0) as u32,
+            loop_end_ms: 0,
+            colour_id: 0,
+            one: 1,
+            zero_pair: 0,
+            zero_word: 0,
+            loop_numerator: 0,
+            loop_denominator: 0,
+        });
+        entry.extend(wide_string(&cue.comment));
+        entry.extend(bytes(&ExtendedCueColour {
+            colour_index: 0,
+            red: 0,
+            green: 0,
+            blue: 0,
+            unknown: [0; 5],
+        }));
+        // The header covers the kind, the two lengths and the hot cue slot,
+        // which is where the format analysis puts the split.
+        body.extend(section(b"PCP2", 0x10, &entry));
+    }
+
+    section(b"PCO2", 0x14, &body)
+}
+
+/// A length-prefixed UTF-16BE string with a terminator, as a cue comment is.
+///
+/// The length counts the terminator, and an empty comment is a length of zero
+/// with no bytes after it rather than a length of two with a terminator.
+fn wide_string(text: &str) -> Vec<u8> {
+    if text.is_empty() {
+        return 0u32.to_be_bytes().to_vec();
+    }
+    let mut encoded: Vec<u8> = text.encode_utf16().flat_map(u16::to_be_bytes).collect();
+    encoded.extend_from_slice(&[0, 0]);
+
+    let mut out = (encoded.len() as u32).to_be_bytes().to_vec();
+    out.extend_from_slice(&encoded);
+    out
+}
+
+/// What a high-mood phrase kind means, which is the vocabulary this tool's own
+/// labels fit.
+///
+/// The five the export measured against uses, and the five the structure stage
+/// names, land on each other: an intro is an intro, a build runs energy up, a
+/// drop is the loudest stretch the track has, a breakdown takes the kick out,
+/// and an outro is an outro. A stretch this tool could not place goes down as
+/// "up", because the high mood has no word for one and the alternative is
+/// leaving a hole in the middle of the track.
+fn phrase_kind(label: SectionLabel) -> u16 {
+    match label {
+        SectionLabel::Intro => 1,
+        SectionLabel::Build | SectionLabel::Steady => 2,
+        SectionLabel::Breakdown => 3,
+        SectionLabel::Drop => 5,
+        SectionLabel::Outro => 6,
+    }
+}
+
+/// The beat a time falls on, counted from 1, which is how a phrase names one.
+fn beat_at(track: &Track, seconds: f64) -> u16 {
+    let index = track
+        .beats
+        .iter()
+        .enumerate()
+        .min_by(|(_, a), (_, b)| {
+            let (a, b) = (
+                (a.time_seconds - seconds).abs(),
+                (b.time_seconds - seconds).abs(),
+            );
+            a.total_cmp(&b)
+        })
+        .map(|(index, _)| index)
+        .unwrap_or(0);
+    (index as u16).saturating_add(1)
+}
+
+/// `PSSI`: the phrases, which is what a player lights the track by and what
+/// anything reading this stick gets instead of running its own analysis.
+///
+/// Masked, because every export since rekordbox 6 is: each byte from `mood`
+/// onwards is XORed with a nineteen-byte pattern whose every byte has the
+/// phrase count added to it. The pattern is the one the format analysis
+/// records, and it decodes the export measured against into 31 phrases whose
+/// beats land on its bar lines.
+///
+/// The phrases are this tool's own sections, one phrase each, which is coarser
+/// than rekordbox's: it cut this track into 31 phrases where the structure
+/// stage found 4 stretches. Both are claims about the same track; these are the
+/// ones `report.json` carries the evidence for.
+fn song_structure(track: &Track) -> Vec<u8> {
+    let mut body = bytes(&SongStructureBody {
+        mood: MOOD_HIGH,
+        zero: 0,
+        zero_word: 0,
+        end_beat: track
+            .sections
+            .last()
+            .map(|section| beat_at(track, section.end_seconds))
+            .unwrap_or(0),
+        zero_pair: 0,
+        bank: 0,
+        zero_byte: 0,
+    });
+
+    for (position, section) in track.sections.iter().enumerate() {
+        body.extend(bytes(&PhraseEntry {
+            index: position as u16 + 1,
+            beat: beat_at(track, section.start_seconds),
+            kind: phrase_kind(section.label),
+            zero: 0,
+            k1: 0,
+            zero_2: 0,
+            k2: 0,
+            zero_3: 0,
+            b: 0,
+            beat2: 0,
+            beat3: 0,
+            beat4: 0,
+            zero_4: 0,
+            k3: 0,
+            zero_5: 0,
+            fill: 0,
+            beat_fill: 0,
+        }));
+    }
+
+    let count = track.sections.len() as u16;
+    for (position, byte) in body.iter_mut().enumerate() {
+        *byte ^= mask_byte(position, count);
+    }
+
+    let mut out = bytes(&SongStructureHeader {
+        len_entry_bytes: PHRASE_BYTES,
+        len_entries: count,
+    });
+    out.extend_from_slice(&body);
+    section(b"PSSI", 0x20, &out)
+}
+
+/// The mask over a `PSSI` body, which starts at the mood and runs to the end.
+fn mask_byte(position: usize, len_entries: u16) -> u8 {
+    /// The pattern the format analysis records, before the count is added.
+    const PATTERN: [u8; 19] = [
+        0xCB, 0xE1, 0xEE, 0xFA, 0xE5, 0xEE, 0xAD, 0xEE, 0xE9, 0xD2, 0xE9, 0xEB, 0xE1, 0xE9, 0xF3,
+        0xE8, 0xE9, 0xF4, 0xE1,
+    ];
+    (u16::from(PATTERN[position % PATTERN.len()]) + len_entries) as u8
 }
 
 /// One byte of a monochrome waveform.
@@ -453,18 +856,12 @@ fn colour_waveform_preview(track: &Track) -> Vec<u8> {
     let columns = waveform::resample(&track.preview, COLOUR_PREVIEW_COLUMNS);
     let mut content = Vec::with_capacity(columns.len() * 6);
     for column in &columns {
-        let column = column.clamped();
-        let energy = |level: u8| {
-            ((f64::from(level) / 7.0) * (f64::from(column.height) / 31.0) * 255.0).round() as u8
-        };
-        let (low, mid, high) = (energy(column.low), energy(column.mid), energy(column.high));
-        // A column with energy in every band is the white one, so the smallest
-        // of the three is what both whiteness bytes carry.
-        let whiteness = low.min(mid).min(high);
+        let [low, mid, high] = band_levels(column);
+        let height = level(f64::from(column.clamped().height) / 31.0);
         content.extend(bytes(&ColourPreviewColumn {
-            whiteness,
-            whiteness_again: whiteness,
-            below_10k: low.saturating_add(mid / 2),
+            height,
+            inverse_height: 255 - height,
+            loudest_band: low.max(mid).max(high),
             low,
             mid,
             high,
@@ -480,22 +877,33 @@ fn colour_waveform_preview(track: &Track) -> Vec<u8> {
     section(b"PWV4", 0x18, &body)
 }
 
-/// One three-band column, at the resolution a band level is stored in.
+/// A share of full scale as a waveform field that stores a level rather than a
+/// balance holds it.
 ///
-/// Levels run to 127 rather than 255: across the three-band waveforms measured
-/// here no band ever exceeds it, and a value a player clamps is a value it
-/// draws wrong.
-fn three_band(column: &Column) -> Vec<u8> {
+/// Levels run to 127 rather than 255: across the three-band waveforms and the
+/// colour preview measured here no band ever exceeds it, and a value a player
+/// clamps is a value it draws wrong. The colour preview this exporter wrote
+/// before scaled its bands to 255 and spent most of a loud track pinned there.
+fn level(share: f64) -> u8 {
     const FULL: f64 = 127.0;
+    (share * FULL).round() as u8
+}
+
+/// The three band levels of a column, each scaled by the column's height.
+///
+/// A [`Column`] carries a balance, where the loudest band of the column reads
+/// 7, and the level a waveform stores is that balance times the height. `PWV4`,
+/// `PWV6` and `PWV7` all store it, so it is computed once.
+fn band_levels(column: &Column) -> [u8; 3] {
     let column = column.clamped();
-    let level = |band: u8| {
-        ((f64::from(band) / 7.0) * (f64::from(column.height) / 31.0) * FULL).round() as u8
-    };
-    bytes(&ThreeBandColumn {
-        low: level(column.low),
-        mid: level(column.mid),
-        high: level(column.high),
-    })
+    let height = f64::from(column.height) / 31.0;
+    [column.low, column.mid, column.high].map(|band| level(f64::from(band) / 7.0 * height))
+}
+
+/// One three-band column, one level per band.
+fn three_band(column: &Column) -> Vec<u8> {
+    let [low, mid, high] = band_levels(column);
+    bytes(&ThreeBandColumn { low, mid, high })
 }
 
 /// `PWV7`: the three-band scrolling waveform, three bytes per column.
@@ -559,9 +967,9 @@ fn colour_waveform_detail(track: &Track) -> Vec<u8> {
     for column in track.detail.columns() {
         let column = column.clamped();
         content.extend(bytes(&ColourDetailColumn {
-            high: column.high,
-            mid: column.mid,
             low: column.low,
+            mid: column.mid,
+            high: column.high,
             height: column.height,
             sub_step: 0,
         }));
@@ -590,11 +998,11 @@ mod packing {
     }
 
     fn shifted_colour_detail(column: &Column) -> [u8; 2] {
-        let packed: u16 = u16::from(column.high & 0x07)
-            | (u16::from(column.mid & 0x07) << 3)
-            | (u16::from(column.low & 0x07) << 6)
-            | (u16::from(column.height & 0x1f) << 9);
-        [packed as u8, (packed >> 8) as u8]
+        let packed: u16 = (u16::from(column.low & 0x07) << 13)
+            | (u16::from(column.mid & 0x07) << 10)
+            | (u16::from(column.high & 0x07) << 7)
+            | (u16::from(column.height & 0x1f) << 2);
+        packed.to_be_bytes()
     }
 
     #[test]
@@ -618,9 +1026,9 @@ mod packing {
                         );
 
                         let declared = bytes(&ColourDetailColumn {
-                            high: column.high,
-                            mid: column.mid,
                             low: column.low,
+                            mid: column.mid,
+                            high: column.high,
                             height: column.height,
                             sub_step: 0,
                         });

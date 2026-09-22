@@ -88,6 +88,48 @@ pub struct Cue {
     pub comment: String,
 }
 
+/// What the structure stage called one stretch of the track.
+///
+/// The six the analysis names, not the phrase vocabulary of any device. The
+/// exporters translate; a stretch this tool could not place is `Steady` here and
+/// stays a stretch rather than becoming somebody else's label by default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SectionLabel {
+    Intro,
+    Build,
+    Drop,
+    Breakdown,
+    Outro,
+    Steady,
+}
+
+impl SectionLabel {
+    /// The label as the report spells it, which is where these come from.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "intro" => Some(SectionLabel::Intro),
+            "build" => Some(SectionLabel::Build),
+            "drop" => Some(SectionLabel::Drop),
+            "breakdown" => Some(SectionLabel::Breakdown),
+            "outro" => Some(SectionLabel::Outro),
+            "steady" => Some(SectionLabel::Steady),
+            _ => None,
+        }
+    }
+}
+
+/// One stretch of the track and what it is.
+///
+/// Times rather than bars, because a bar index means nothing without the grid
+/// that produced it and a time is what every writer here already converts. The
+/// stretches abut and cover the track in order.
+#[derive(Clone, Copy, Debug)]
+pub struct Section {
+    pub label: SectionLabel,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+}
+
 /// A track as a device will see it.
 #[derive(Clone, Debug)]
 pub struct Track {
@@ -129,6 +171,10 @@ pub struct Track {
     pub seek_table: Option<Vec<u32>>,
     pub beats: Vec<Beat>,
     pub cues: Vec<Cue>,
+    /// What each stretch of the track is, in order. Empty when the analysis
+    /// placed none, which is a track with no phrases rather than one phrase
+    /// covering everything.
+    pub sections: Vec<Section>,
     pub preview: Waveform,
     pub detail: Waveform,
 }

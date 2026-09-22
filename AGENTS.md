@@ -242,10 +242,61 @@ edit to `Cargo.toml`.
     What `PWVC` calibrates is unestablished, and the loudest column per band is written there
     rather than a constant, because two real files disagree about its scale.
 
-    The `EXT` is still short of a real one by `PCO2` twice, `PQT2` and `PSSI`. `PCO2` is not
-    written empty to close the gap: the file compared against here has it empty only because
-    it has no cues, and an empty extended cue list beside a populated `PCOB` is how a Nexus 2
-    player is told this track has none.
+    The `EXT` now carries the four sections it used to be short of. `PCO2` is written for both
+    lists and populated from the same cues `PCOB` holds, because an empty extended cue list
+    beside a populated `PCOB` is how a Nexus 2 player is told this track has none. What is
+    still missing from a real `EXT` is `PVDI`, the vocal detection, which needs the stem
+    separated and is out of scope by section 4.
+27. **A waveform layout is settled by a rekordbox export of the same track, not by
+    rekordcrate.** The parser reads a `PWV5` column's two bytes from the low end up, this
+    exporter wrote what the parser read, and the round trip passed on a file no player would
+    draw. rekordbox analysed one of this tool's own tracks onto the same stick, and against
+    that file the height sits in bits six to two of the second byte, where it matches the
+    track's `PWV3` height column for column at 0.97 over all 66 395 columns; one bit lower,
+    where rekordcrate puts it, the match is 0.51 and the number differs on almost every
+    column. So the column packs from the high bit of the first byte down: low band, mid, high,
+    five bits of height, two bits left zero. The bands go by measurement too, each field
+    against that track's own audio through the crossovers in `libraries/rust/waveform`: the
+    low band in the field rekordcrate calls red at 0.73, the high band in the one it calls
+    blue at 0.53.
+
+    `PWV4` is a height and three levels, not four energies. Its first byte tracks the loudest
+    detail column under it at 0.97 and stops at 127, the second is that byte taken from 255,
+    the third is the largest of the last three, and those three carry the low, mid and high
+    levels at 0.97, 0.83 and 0.84. This exporter wrote the smallest of the three energies in
+    the first two bytes, which is zero wherever one band is quiet, and scaled the levels to
+    255, which pinned them there for most of a loud track. A track's colour preview was flat
+    and its scrolling waveform was noise, and every test passed, because the only reader
+    either had ever met was the one that agreed with them.
+28. **The phrases this tool writes are its own, and a stretch it could not name stays a
+    stretch.** `PSSI` is what a player lights a track by and what other tooling reads instead
+    of analysing the audio itself, so the six labels in `libraries/rust/structure` go out in
+    the high mood, where intro, up, down, chorus and outro sit. `Steady` has no word there and
+    goes down as up, which is the one place the mapping loses something; nothing invents a
+    phrase where the structure stage found none, and a track with no sections gets an empty
+    `PSSI` rather than one phrase covering everything. The variant flags `k1` to `k3` and the
+    marks `beat2` to `beat4` are written zero, as all 31 phrases of the export measured
+    against carry them, because nothing here measures what they would say.
+
+    These are coarser than rekordbox's on purpose. It cut the same track into 31 phrases at
+    every sixteen or thirty-two bars; the structure stage found four stretches and each one
+    carries `low_band_db`, `broadband_db`, `rise_db` and a confidence in `report.json`. Rule
+    21 is the same rule: a label is a claim and carries its evidence, and that holds when the
+    claim is written into somebody else's format.
+
+    The section is masked, as every export since rekordbox 6 is: each byte from the mood on is
+    XORed with the nineteen-byte pattern the format analysis records, each byte of it plus the
+    phrase count. That is the one part of this a test can prove on its own, because rekordcrate
+    only parses a `PSSI` whose mask it can undo.
+29. **`PQTZ` rounds a beat down, because `PQT2` carries the rest of it.** The extended grid is
+    one word per beat holding the microseconds past that whole millisecond, so a millisecond
+    rounded up would need a negative remainder. On the export measured against, the `PQTZ`
+    time plus that word over 1000 fits a straight line through all 923 beats to within
+    0.046 ms against 0.527 ms for the milliseconds alone, which is what says the word is a
+    remainder and not something else. One word of its header nothing explains: the export
+    carries 0x0cdcb1f5 and that is not the track's length, beat count, tempo or sample count,
+    so it is written zero rather than copied. Rule 15 covers constants, and a number that
+    looks track-specific is not one.
 
 ## 3. What a change to the algorithm has to show
 

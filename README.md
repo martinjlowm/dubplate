@@ -101,7 +101,7 @@ too, holding:
 |---|---|
 | `/Contents/126_05A_Artist-Title.flac` | The audio, named after its own tempo and key, zero padded so a plain listing sorts by tempo and then around the wheel. |
 | `/PIONEER/rekordbox/export.pdb` | **Pioneer.** The DeviceSQL database a CDJ, XDJ or RX3 browses: tracks, artists, keys, one playlist. |
-| `/PIONEER/USBANLZ/…/ANLZ0000.DAT` and `.EXT` | **Pioneer.** Per track: the beat grid, the cue, the monochrome waveforms and the colour pair a Nexus 2 or newer draws. |
+| `/PIONEER/USBANLZ/…/ANLZ0000.DAT`, `.EXT` and `.2EX` | **Pioneer.** Per track: the beat grid, the cues with their names, the phrases, and three generations of waveform, up to the three-band pair an XDJ-RX3 draws. |
 | `/Engine Library/Database2/m.db` | **Denon.** Engine schema 2.21.2, which Engine DJ 2 and 3 read: tempo, key, beat grid, cue slots, overview waveform. |
 
 Both databases go on every image. They read different directories, neither player looks at
@@ -629,10 +629,15 @@ so it can check this output and cannot produce it.
 
 So the writer here is ours, and rekordcrate is the oracle: the tests write a database and read
 it back through its own parser, across page boundaries, through the UTF-16 string encoding,
-and into the playlist entries. That is the strongest check available without hardware. It says
-the file is well formed and the values survive; it does not say a player accepts it, and no
-CDJ has read one of these sticks yet. The fields whose purpose nobody has established carry the
-constants that appear in real exports, and they are named as unknown where they are written.
+and into the playlist entries. It says the file is well formed and the values survive; it does
+not say a player draws them. An XDJ-RX3 browses one of these sticks and plays from it, and for
+a while it drew no colour waveform: the parser reads a colour column's two bytes from the low
+end up, this exporter wrote what the parser read, and the round trip passed on bytes rekordbox
+would never write. So a layout in doubt is now settled against a rekordbox export of a track
+this tool also analysed, column for column, and rekordcrate's reading of the colour waveform is
+not among the things the tests believe. The fields whose purpose nobody has established carry
+the constants that appear in real exports, and they are named as unknown where they are
+written.
 
 Denon's side is easier and harder. Easier because the database is SQLite and its schema is
 recorded in libdjinterop, so the file is checked by its own constraints and triggers as it is
