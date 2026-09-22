@@ -40,7 +40,14 @@ struct TrackRowFixed {
     sample_rate: u32,
     composer_id: u32,
     file_size: u32,
+    /// Varies from track to track in every export read, so it is an id or a
+    /// hash rather than a constant, and nothing here can derive it.
     unknown2: u32,
+    /// The format analysis records these two as "always 19048" and "always
+    /// 30967". Both rekordbox 7 exports measured here carry the values below
+    /// instead, identical in tracks exported fourteen months apart, so they are
+    /// constants of the writer that have moved since the analysis was written.
+    /// Zero, which is what this wrote, is not either reading.
     unknown3: u16,
     unknown4: u16,
     artwork_id: u32,
@@ -103,8 +110,8 @@ impl TrackRow {
             composer_id: 0,
             file_size: self.file_size,
             unknown2: 0,
-            unknown3: 0,
-            unknown4: 0,
+            unknown3: 8275,
+            unknown4: 6017,
             artwork_id: 0,
             key_id: self.key_id,
             original_artist_id: 0,
