@@ -87,16 +87,20 @@ check-workflows: synth-workflows
     git diff --exit-code -- .github/workflows/
 
 # Regenerate the crate graph after a dependency change
-sync-cargo-nix:
-    crate2nix generate -h .crate-hashes.json
+sync-cargo-json:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp=$(mktemp -d)
+    trap "rm -rf $tmp" EXIT
+    crate2nix generate --format json -o Cargo.json -h "$tmp/crate-hashes.json"
 
-# Fail if Cargo.nix no longer matches the manifests
-check-cargo-nix: sync-cargo-nix
-    git diff --exit-code -- Cargo.nix
+# Fail if Cargo.json no longer matches the manifests
+check-cargo-json: sync-cargo-json
+    git diff --exit-code -- Cargo.json
 
 # Build the CLI through Nix, against the committed crate graph
 build-nix:
     devenv build outputs.dubplate
 
 # All PR gates
-check: fmt-check lint test check-wasm check-cargo-nix check-workflows
+check: fmt-check lint test check-wasm check-cargo-json check-workflows

@@ -37,11 +37,24 @@
   # `devenv build` disagreeing about what compiles.
   toolchain = rustPkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-  # The crate graph is pre-resolved by `crate2nix generate` into a committed
-  # Cargo.nix and consumed here through buildRustCrate. Reading a committed
-  # graph keeps evaluation pure. Nothing fetches or resolves at eval time,
-  # which is the point, and also why it goes stale silently unless a manifest
-  # change regenerates it (the cargoNixSync hook below).
+  # Only the manifests and the Rust trees. The repo root would pull in
+  # ./archives and ./audio, which may be symlinks to a whole music library.
+  rustSrc = pkgs.lib.fileset.toSource {
+    root = ./.;
+    fileset = pkgs.lib.fileset.unions [
+      ./Cargo.toml
+      ./Cargo.lock
+      ./libraries/rust
+      ./tools/rust
+    ];
+  };
+
+  # The crate graph is pre-resolved by `crate2nix generate --format json` into
+  # a committed Cargo.json and read here through crate2nix's build-from-json
+  # consumer. Reading a committed graph keeps evaluation pure. Nothing fetches
+  # or resolves at eval time, which is the point, and also why it goes stale
+  # silently unless a manifest change regenerates it (the cargoJsonSync hook
+  # below).
   buildRustCrateForPkgs = crossPkgs:
   # Every crate in the graph is pure Rust. rustfft, hound, png and the serde
   # stack pull no C libraries, so there are no crate overrides for native
@@ -52,10 +65,11 @@
       cargo = toolchain;
     };
 
-  workspace = import ./Cargo.nix {
+  workspace = import "${inputs.crate2nix}/lib/build-from-json.nix" {
     pkgs = rustPkgs;
+    src = rustSrc;
+    resolvedJson = ./Cargo.json;
     inherit buildRustCrateForPkgs;
-    release = true;
   };
 
   dubplate = workspace.workspaceMembers."dubplate".build;
@@ -124,30 +138,31 @@ in {
 
   git-hooks.hooks.treefmt.enable = true;
 
-  # Cargo.nix is the pre-resolved crate graph `devenv build` reads. Nothing
+  # Cargo.json is the pre-resolved crate graph `devenv build` reads. Nothing
   # regenerates it at eval time, so a dependency change has to regenerate it
   # here or the Nix build keeps compiling the previous dependency set.
   #
-  # `-h` names a gitignored file rather than a temp one, and the path matters:
-  # crate2nix records the arguments it was called with in a comment at the top
-  # of Cargo.nix, so a temp path there makes the file differ on every run and
-  # the staleness check can never pass. The hashes themselves are redundant,
-  # since registry hashes come from Cargo.lock and are baked into Cargo.nix.
+  # `-h` points at a temp file. The JSON format records no arguments, so the
+  # path never reaches Cargo.json, and the hashes it would hold are already in
+  # Cargo.json: registry hashes come from Cargo.lock and git hashes are
+  # prefetched into it.
   #
   # Git exports GIT_DIR and friends to hooks, which nix-prefetch-git would
   # inherit and use to reinitialise this repo instead of its own scratch
   # directory, so they are unset.
-  git-hooks.hooks.cargoNixSync = {
+  git-hooks.hooks.cargoJsonSync = {
     enable = true;
-    name = "cargo-nix-sync";
+    name = "cargo-json-sync";
     entry = ''
       ${pkgs.bash}/bin/bash -euo pipefail -c '
         cd "${config.devenv.root}"
         unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_PREFIX
-        ${crate2nix}/bin/crate2nix generate -h .crate-hashes.json
+        tmp=$(mktemp -d)
+        trap "rm -rf $tmp" EXIT
+        ${crate2nix}/bin/crate2nix generate --format json -o Cargo.json -h "$tmp/crate-hashes.json"
       '
     '';
-    files = "Cargo\\.(toml|lock|nix)$";
+    files = "Cargo\\.(toml|lock|json)$";
     pass_filenames = false;
     stages = ["pre-commit" "manual"];
   };

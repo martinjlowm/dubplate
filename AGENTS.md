@@ -96,7 +96,7 @@ edit to `Cargo.toml`.
    fixture whose true tempo is an assumption fails for two reasons and cannot separate them.
 10. **Audio never enters the repository.** `.gitignore` covers `*.wav` and the rest. The
     working set sits untracked in the repo root.
-11. **`Cargo.nix` is generated.** Fix the manifest and regenerate with `just sync-cargo-nix`.
+11. **`Cargo.json` is generated.** Fix the manifest and regenerate with `just sync-cargo-json`.
     The pre-commit hook does it for you; CI fails when the graph and the manifests disagree.
 12. **Renaming never touches the source.** `rename` writes links or copies under a directory
     you name, and the default mode changes nothing at all. The Nix pipeline is the same rule
@@ -421,7 +421,7 @@ No em dashes. Sentence case in headings. Name the actor rather than writing in t
   of `extend_from_slice(&x.to_be_bytes())`. It refuses a value too wide for its field rather
   than truncating it, which is why the packed waveform columns pass through `Column::clamped`
   first. It costs about 110 ms per track in the export step, which the volume here can afford.
-- **crate2nix** resolves the crate graph ahead of time into `Cargo.nix`, which
+- **crate2nix** resolves the crate graph ahead of time into `Cargo.json`, which
   `devenv build outputs.dubplate` reads. Nothing fetches during evaluation.
 - **outputs.library** builds every track in `archives/` and `audio/` into `wav/`, `flac/` and
   `mp3/`, and **outputs.usb** builds an image from each. Both nest: `outputs.library.flac` is
