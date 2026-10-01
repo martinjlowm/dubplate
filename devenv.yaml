@@ -5,11 +5,10 @@ inputs:
   # into a full rebuild of every dependency.
   nixpkgs:
     url: github:NixOS/nixpkgs/nixos-26.05
-  # Pinned so `just sync-cargo-nix` regenerates Cargo.nix with a known version,
-  # instead of `nix run nixpkgs#crate2nix` resolving whatever the caller's
-  # registry points at.
+  # The revision nest pins: the generator that writes Cargo.json, and the
+  # build-from-json.nix that reads it, come from the same commit.
   crate2nix:
-    url: github:nix-community/crate2nix
+    url: github:nix-community/crate2nix/b873ca53dd64e12340416f0fd5e3b33792b9c17b
     inputs:
       nixpkgs:
         follows: nixpkgs
